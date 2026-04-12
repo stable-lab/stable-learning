@@ -6,7 +6,7 @@ import Default from '@astrojs/starlight/components/Footer.astro';
 
 <footer class="site-footer">
   <div class="footer-content">
-    <img src="/stable-logo.jpeg" alt="Stable Lab" class="footer-logo" />
+    <img src={`${import.meta.env.BASE_URL}stable-logo.jpeg`} alt="Stable Lab" class="footer-logo" />
     <p>&copy; {new Date().getFullYear()} Stable Lab. All rights reserved.</p>
   </div>
 </footer>
