@@ -1,0 +1,53 @@
+---
+title: REINFORCE
+description: The simplest policy gradient algorithm
+sidebar:
+  order: 1
+---
+
+import PolicyGradientViz from '../../../../components/visualizations/PolicyGradientViz';
+
+## The Algorithm
+
+**REINFORCE** (Williams, 1992) is the most basic policy gradient method. It estimates the gradient from complete episodes:
+
+1. Sample a trajectory $\tau = (s_0, a_0, r_0, \ldots, s_T)$ by running $\pi_\theta$
+2. For each timestep $t$, compute the return $G_t = \sum_{k=t}^{T} \gamma^{k-t} r_k$
+3. Update: $\theta \leftarrow \theta + \alpha \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot G_t$
+
+The gradient estimate is **unbiased** — in expectation, it equals the true gradient. But it has **high variance** because $G_t$ includes all future rewards, which are noisy.
+
+## Pseudocode
+
+```
+Initialize policy parameters θ
+for each episode:
+    Generate trajectory τ ~ π_θ
+    for t = 0 to T:
+        G_t ← Σ_{k=t}^{T} γ^{k-t} · r_k
+        θ ← θ + α · ∇_θ log π_θ(a_t | s_t) · G_t
+```
+
+## Interactive: Gradient Ascent on a Non-Convex Landscape
+
+The objective $J(\theta)$ is rarely convex in practice — it has local optima, saddle regions, and the gradient is estimated from noisy samples. Explore how these affect optimization:
+
+<PolicyGradientViz client:only="react" />
+
+:::note[Things to try]
+- **Different starting points** — Start A gets trapped in the local optimum; Start C finds the global optimum easily. This is why initialization matters.
+- **Learning rate** — too small and you get stuck; too large and you overshoot past good regions.
+- **Stochastic gradient** — enable noise to see how sampling variance causes the path to wander. This is what real policy gradient looks like — the gradient is estimated from a finite batch of trajectories.
+:::
+
+## The Score Function Estimator
+
+The term $\nabla_\theta \log \pi_\theta(a_t \mid s_t)$ is called the **score function**. It has a useful property:
+
+$$
+\nabla_\theta \log \pi_\theta(a \mid s) = \frac{\nabla_\theta \pi_\theta(a \mid s)}{\pi_\theta(a \mid s)}
+$$
+
+This is what allows us to turn an expectation over trajectories into a practical Monte Carlo estimate — we sample trajectories and multiply the score by the return.
+
+For a categorical policy (like a language model), if $\pi_\theta(a \mid s) = \text{softmax}(f_\theta(s))_a$, then the score function is just the gradient of the log-softmax output.

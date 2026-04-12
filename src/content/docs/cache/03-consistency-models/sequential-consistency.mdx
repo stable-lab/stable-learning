@@ -1,0 +1,56 @@
+---
+title: Sequential Consistency
+description: The strongest memory model — Lamport's ideal
+sidebar:
+  order: 1
+---
+
+## Lamport's Definition (1979)
+
+> A multiprocessor system is **sequentially consistent** if the result of any execution is the same as if the operations of all processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program.
+
+Two key requirements:
+
+1. **Program order**: each core's operations appear in the order they were written
+2. **Global total order**: there exists a single interleaving of all operations consistent with all observations
+
+## What SC Forbids
+
+Under SC, if Core 0 executes `Store x; Store y`, then any core that sees the new value of $y$ must also see the new value of $x$. Writes become visible to all cores simultaneously and in program order.
+
+### The Litmus Test
+
+```
+Initially: x = 0, y = 0
+
+Core 0:           Core 1:
+  x = 1             y = 1
+  r0 = y            r1 = x
+
+Can r0 = 0 AND r1 = 0?
+```
+
+Under **SC**: **No.** At least one core's store must appear first in the total order. If `x = 1` comes first, then Core 1's `r1 = x` must see 1. If `y = 1` comes first, then Core 0's `r0 = y` must see 1.
+
+## Why SC Is Expensive
+
+To implement SC, the hardware must:
+
+1. Complete each memory operation before starting the next (no pipelining stores)
+2. Make every store visible to all cores before proceeding
+3. Stall the pipeline on store-load dependencies
+
+This means **no store buffers** (or they must be drained before each load). Modern CPUs would lose significant performance — store buffers alone account for ~20-30% of throughput.
+
+:::note[No mainstream CPU implements SC]
+Even though SC is the easiest model to reason about, no modern commercial processor provides SC as its default memory model. The performance cost is too high. Instead, they provide TSO (x86) or relaxed models (ARM) and let software add fences where needed.
+:::
+
+## SC for Data-Race-Free Programs (SC-DRF)
+
+Modern languages (C++, Java, Rust) offer a practical compromise: **SC-DRF**:
+
+- If your program is **data-race-free** (all shared accesses are properly synchronized), the compiler and hardware guarantee SC behavior
+- If your program has data races, all bets are off (undefined behavior in C++)
+
+This lets the hardware and compiler optimize freely as long as synchronization points are respected.

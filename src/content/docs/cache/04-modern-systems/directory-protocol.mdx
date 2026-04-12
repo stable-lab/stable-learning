@@ -1,0 +1,80 @@
+---
+title: Directory Protocols
+description: How directory-based coherence tracks sharers
+sidebar:
+  order: 1
+---
+
+## The Directory
+
+Each cache line in memory has an associated **directory entry** that tracks:
+
+- **State**: whether the line is uncached, shared, or exclusively owned
+- **Sharer list**: which caches currently hold a copy
+
+### Directory Entry Format
+
+For a system with $N$ cores, a common representation is a **bit vector**:
+
+$$
+\text{State (2 bits)} + \text{Sharer vector (N bits)}
+$$
+
+For 64 cores, that's 66 bits per cache line. With 64-byte cache lines and 256 GB of memory, that's:
+
+$$
+\frac{256 \times 10^9}{64} \times \frac{66}{8} \approx 33 \text{ GB of directory storage}
+$$
+
+This is a significant overhead — real systems use compression techniques.
+
+## Directory Operations
+
+### Read Miss
+
+1. Core $i$ sends `Read(A)` to the **home node** (the directory controller for address $A$)
+2. Directory looks up the state of line $A$:
+   - **Uncached**: fetch from memory, send to Core $i$, mark as Shared, add $i$ to sharer list
+   - **Shared**: send data to Core $i$, add $i$ to sharer list
+   - **Exclusive/Modified by Core $j$**: send **intervention** to Core $j$ → Core $j$ sends data to Core $i$ (and optionally to memory), update directory
+
+### Write Miss
+
+1. Core $i$ sends `Write(A)` to the home node
+2. Directory sends **invalidation** messages to all sharers in the bit vector
+3. Each sharer invalidates its copy and sends an **ack**
+4. Once all acks are received, Core $i$ gets exclusive access
+
+The critical path is the **invalidation round-trip**: the writing core must wait for all sharers to acknowledge before proceeding.
+
+## Reducing Directory Overhead
+
+| Technique | How it works | Tradeoff |
+|-----------|-------------|----------|
+| **Limited pointers** | Track only $K$ sharers; broadcast invalidation if more | Saves storage; rare broadcasts |
+| **Coarse bit vector** | One bit per cluster of cores, not per core | Fewer bits; some unnecessary invalidations |
+| **Sparse directory** | Only store entries for cached lines (use a hash table) | Saves memory; lookup overhead |
+| **Hierarchical directory** | Directory-of-directories for NUMA systems | Scales to large systems; more hops |
+
+## NUMA and Home Nodes
+
+In **Non-Uniform Memory Access** (NUMA) systems, each socket "owns" a portion of physical memory. The **home node** for address $A$ is the socket whose local memory contains $A$.
+
+```
+Socket 0 (Home for addr 0x0000-0x3FFF)
+  ├── Cores 0-15
+  └── Local DRAM + Directory
+
+Socket 1 (Home for addr 0x4000-0x7FFF)
+  ├── Cores 16-31
+  └── Local DRAM + Directory
+```
+
+Accessing local memory is fast (~50 ns). Accessing remote memory requires going through the interconnect to the remote socket's directory (~100-150 ns). This 2-3x latency difference is why **NUMA-aware** allocation matters.
+
+:::tip[Practical Impact]
+If your application runs on a multi-socket server:
+- Use `numactl --localalloc` to keep data near the cores accessing it
+- Avoid false sharing (two cores writing to the same cache line) across sockets — the coherence traffic crosses the inter-socket link
+- Monitor NUMA-remote accesses with `perf stat -e numa-*` events
+:::

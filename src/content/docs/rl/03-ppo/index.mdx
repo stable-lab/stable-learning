@@ -1,0 +1,63 @@
+---
+title: Proximal Policy Optimization (PPO)
+description: Stable policy updates with clipped surrogate objectives
+sidebar:
+  order: 0
+---
+
+**PPO** (Schulman et al., 2017) is the workhorse of modern RL. It improves on vanilla policy gradient by constraining how much the policy can change in each update, leading to more stable training.
+
+## Motivation: The Trust Region
+
+REINFORCE updates can be unstable — a single bad gradient step can catastrophically change the policy. The idea behind PPO is to keep the new policy "close" to the old one.
+
+We define the **probability ratio**:
+
+$$
+r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_\text{old}}(a_t \mid s_t)}
+$$
+
+When $r_t = 1$, the new and old policies agree. When $r_t$ deviates far from 1, the policy has changed significantly.
+
+## The Surrogate Objective
+
+The vanilla surrogate objective is:
+
+$$
+L^{CPI}(\theta) = \mathbb{E}_t \left[ r_t(\theta) \hat{A}_t \right]
+$$
+
+where $\hat{A}_t$ is the estimated advantage. But maximizing this without constraint can lead to excessively large policy updates.
+
+## PPO's Clipped Objective
+
+PPO clips the ratio to prevent large updates:
+
+$$
+L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min \left( r_t(\theta) \hat{A}_t, \; \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]
+$$
+
+The $\min$ ensures:
+- When $\hat{A}_t > 0$ (good action): the ratio is capped at $1 + \epsilon$, preventing over-reinforcement
+- When $\hat{A}_t < 0$ (bad action): the ratio is capped at $1 - \epsilon$, preventing over-punishment
+
+The typical value is $\epsilon = 0.2$.
+
+## PPO Algorithm
+
+```
+Initialize policy π_θ and value function V_φ
+for each iteration:
+    Collect trajectories using π_θ
+    Compute advantages Â_t using GAE
+    for each mini-batch epoch:
+        Compute r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)
+        L_clip = min(r_t·Â_t, clip(r_t, 1-ε, 1+ε)·Â_t)
+        Update θ to maximize L_clip
+        Update φ to minimize (V_φ(s_t) - G_t)²
+    θ_old ← θ
+```
+
+:::note[PPO in LLM Training]
+PPO is the algorithm behind RLHF (Reinforcement Learning from Human Feedback). The language model is the policy, token generation is the action, and the reward comes from a reward model trained on human preferences. The "old policy" is the model from the previous iteration.
+:::

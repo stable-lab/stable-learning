@@ -1,0 +1,30 @@
+---
+title: Stable Learning
+description: Multi-domain learning materials for the lab
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+This is a collection of learning materials maintained by the lab. Each topic is structured as a progressive reading path with interactive visualizations. Pick a topic below and start from the beginning, or jump to any section.
+
+## Reinforcement Learning
+
+From MDPs to modern policy optimization for LLM alignment.
+
+**Prerequisites**: calculus, basic probability, familiarity with neural networks.
+
+<LinkCard title="1. Action Chain & Rewards" description="MDPs, states, actions, rewards, and the discount factor." href="/rl/01-action-chain-rewards/" />
+<LinkCard title="2. Policy Gradient" description="REINFORCE, the score function estimator, and variance reduction." href="/rl/02-policy-gradient/" />
+<LinkCard title="3. PPO" description="Proximal Policy Optimization, clipped surrogate objectives, and GAE." href="/rl/03-ppo/" />
+<LinkCard title="4. GRPO" description="Group Relative Policy Optimization — removing the critic for LLM alignment." href="/rl/04-grpo/" />
+
+## Cache Coherence & Consistency
+
+How multicore CPUs keep caches correct, from hardware protocols to memory fences.
+
+**Prerequisites**: basic computer architecture (registers, memory, assembly helps but not required).
+
+<LinkCard title="1. Cache Fundamentals" description="Memory hierarchy, cache organization (lines, sets, ways), and read/write policies." href="/cache/01-fundamentals/" />
+<LinkCard title="2. Coherence Protocols" description="MSI, MESI, MOESI — the problem of stale data and how snooping solves it." href="/cache/02-coherence-protocols/" />
+<LinkCard title="3. Consistency Models" description="Sequential consistency, TSO (x86), relaxed models (ARM, RISC-V), and why ordering matters." href="/cache/03-consistency-models/" />
+<LinkCard title="4. Modern Systems" description="Directory-based protocols, NUMA, memory fences, and acquire-release semantics." href="/cache/04-modern-systems/" />

@@ -1,0 +1,66 @@
+---
+title: Generalized Advantage Estimation (GAE)
+description: Balancing bias and variance in advantage estimates
+sidebar:
+  order: 2
+---
+
+## The Bias-Variance Tradeoff
+
+How do we estimate the advantage $\hat{A}_t$? There are many options:
+
+**Monte Carlo (high variance, no bias):**
+$$
+\hat{A}_t^{MC} = G_t - V(s_t) = \sum_{k=0}^{T-t} \gamma^k r_{t+k} - V(s_t)
+$$
+
+**TD(0) (low variance, high bias):**
+$$
+\hat{A}_t^{TD} = r_t + \gamma V(s_{t+1}) - V(s_t) = \delta_t
+$$
+
+where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the **TD residual**.
+
+Monte Carlo uses the actual return (accurate but noisy). TD uses the value estimate (smooth but biased by $V$ errors).
+
+## GAE: The Best of Both Worlds
+
+**Generalized Advantage Estimation** (Schulman et al., 2016) interpolates between these extremes with a parameter $\lambda \in [0, 1]$:
+
+$$
+\hat{A}_t^{GAE(\gamma, \lambda)} = \sum_{k=0}^{T-t} (\gamma \lambda)^k \delta_{t+k}
+$$
+
+This can be written recursively:
+
+$$
+\hat{A}_t^{GAE} = \delta_t + \gamma \lambda \hat{A}_{t+1}^{GAE}
+$$
+
+## The Role of $\lambda$
+
+| $\lambda$ | Equivalent to | Bias | Variance |
+|-----------|---------------|------|----------|
+| $\lambda = 0$ | TD(0): $\hat{A}_t = \delta_t$ | High | Low |
+| $\lambda = 1$ | Monte Carlo: $\hat{A}_t = G_t - V(s_t)$ | None | High |
+| $0 < \lambda < 1$ | Weighted mix of n-step returns | Medium | Medium |
+
+:::tip[Practical values]
+$\lambda = 0.95$ with $\gamma = 0.99$ is a common starting point. This gives a good balance — most of the low-variance benefit of bootstrapping with only a small amount of bias.
+:::
+
+## GAE in the PPO Pipeline
+
+The full PPO training loop:
+
+1. Collect rollout data with current policy $\pi_{\theta_\text{old}}$
+2. Compute TD residuals: $\delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$
+3. Compute GAE advantages: $\hat{A}_t = \sum_k (\gamma\lambda)^k \delta_{t+k}$
+4. Compute targets for the value function: $G_t = \hat{A}_t + V_\phi(s_t)$
+5. Run multiple epochs of mini-batch updates on $L^{CLIP}$ and the value loss
+
+## Why Not Just Monte Carlo?
+
+In LLM training (RLHF), episodes can be long (hundreds of tokens). Monte Carlo returns have very high variance because each token's reward signal is buried under the noise of all future tokens.
+
+GAE with $\lambda < 1$ exponentially downweights distant TD residuals, giving a much cleaner signal for credit assignment — which token actually contributed to the reward?

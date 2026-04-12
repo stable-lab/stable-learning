@@ -1,0 +1,65 @@
+---
+title: Rewards and Return
+description: How rewards accumulate and why discounting matters
+sidebar:
+  order: 2
+---
+
+## Reward Signal
+
+The **reward** $r_t = R(s_t, a_t)$ is a scalar signal that tells the agent how good its action was. Rewards can be:
+
+- **Sparse** — only at the end (e.g., win/lose in a game)
+- **Dense** — at every step (e.g., distance to goal)
+- **Shaped** — hand-crafted to guide learning (careful: can introduce bias)
+
+For language models, the reward typically comes from a **reward model** trained on human preferences, or from a rule-based function (e.g., format checking, code execution results).
+
+## Return: Cumulative Reward
+
+The **return** $G_t$ is the total reward from timestep $t$ onward:
+
+$$
+G_t = r_t + r_{t+1} + r_{t+2} + \cdots = \sum_{k=0}^{\infty} r_{t+k}
+$$
+
+But this sum can diverge. Enter the discount factor.
+
+## Discount Factor $\gamma$
+
+The **discounted return** weights future rewards exponentially less:
+
+$$
+G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k}
+$$
+
+where $\gamma \in [0, 1)$. The discount factor controls:
+
+| $\gamma$ | Behavior |
+|-----------|----------|
+| $\gamma \to 0$ | Myopic — only cares about immediate reward |
+| $\gamma \to 1$ | Far-sighted — values future rewards almost equally |
+
+With constant reward $r = 1$, the return converges to $\frac{1}{1 - \gamma}$.
+
+## Value Functions
+
+The **state-value function** $V^\pi(s)$ is the expected return from state $s$ under policy $\pi$:
+
+$$
+V^\pi(s) = \mathbb{E}_\pi \left[ G_t \mid s_t = s \right]
+$$
+
+The **action-value function** $Q^\pi(s, a)$ is the expected return from taking action $a$ in state $s$, then following $\pi$:
+
+$$
+Q^\pi(s, a) = \mathbb{E}_\pi \left[ G_t \mid s_t = s, a_t = a \right]
+$$
+
+The **advantage function** measures how much better an action is compared to the average:
+
+$$
+A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)
+$$
+
+This advantage function will be central to policy gradient methods and PPO.

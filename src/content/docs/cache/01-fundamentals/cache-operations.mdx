@@ -1,0 +1,77 @@
+---
+title: Cache Operations
+description: Read/write policies, eviction, and write strategies
+sidebar:
+  order: 2
+---
+
+## Read Path
+
+When the CPU reads address $A$:
+
+1. Compute the **index** and **tag** from $A$
+2. Look up the set at that index
+3. Compare the tag against all ways in the set
+4. **Hit**: return the data from the matching way
+5. **Miss**: fetch the line from the next cache level, place it in the set, return data
+
+On a miss, if the set is full, one existing line must be **evicted** to make room.
+
+## Write Policies
+
+### Write-Through
+
+Every write updates **both** the cache and the next level immediately.
+
+- **Pro**: Memory is always up-to-date; simpler coherence
+- **Con**: Every write generates memory traffic; slow
+
+### Write-Back
+
+Writes only update the **cache**. The line is marked **dirty**. The dirty line is written to memory only when it's evicted.
+
+- **Pro**: Reduces memory traffic dramatically (multiple writes to the same line are absorbed)
+- **Con**: Memory may contain stale data; evictions are more expensive
+
+:::note[In Practice]
+Almost all modern processors use **write-back** caches. The reduced memory bandwidth pressure is critical for performance, especially with multiple cores sharing a memory bus.
+:::
+
+### Write-Allocate vs No-Write-Allocate
+
+On a **write miss** (the address isn't in the cache):
+
+- **Write-allocate**: fetch the line into the cache, then write to it. Pairs naturally with write-back.
+- **No-write-allocate**: write directly to the next level without caching. Pairs with write-through.
+
+## Eviction Policies
+
+When a set is full and a new line must be loaded, which existing line do we evict?
+
+| Policy | Description | Used in |
+|--------|-------------|---------|
+| **LRU** | Evict the Least Recently Used line | Conceptually ideal, expensive for high associativity |
+| **Pseudo-LRU** | Tree-based approximation of LRU | Most real L1/L2 caches |
+| **Random** | Evict a random line | Some L3 caches; surprisingly competitive |
+
+True LRU requires tracking the access order of all $W$ ways — for 16-way, that's $\log_2(16!) \approx 44$ bits per set. Pseudo-LRU uses a binary tree with $W - 1$ bits, which is much cheaper.
+
+## The Three C's of Cache Misses
+
+| Miss Type | Cause | Mitigation |
+|-----------|-------|------------|
+| **Compulsory** | First access to a block (cold start) | Prefetching |
+| **Capacity** | Working set exceeds cache size | Larger cache, better algorithms |
+| **Conflict** | Multiple blocks compete for the same set | Higher associativity |
+
+Understanding these categories helps diagnose performance problems: if increasing cache size doesn't help, you likely have conflict misses (try higher associativity) or the working set fundamentally doesn't fit.
+
+## Prefetching
+
+Modern CPUs detect access patterns and **prefetch** cache lines before they're needed:
+
+- **Stride prefetcher**: detects sequential or strided access (e.g., array traversal)
+- **Stream prefetcher**: tracks multiple concurrent access streams
+- **Software prefetch**: explicit `__builtin_prefetch()` hints from the programmer
+
+Prefetching converts **compulsory misses** into hits by loading data before the CPU asks for it.

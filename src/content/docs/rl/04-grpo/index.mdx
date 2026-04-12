@@ -1,0 +1,59 @@
+---
+title: Group Relative Policy Optimization (GRPO)
+description: Critic-free policy optimization for LLM alignment
+sidebar:
+  order: 0
+---
+
+**GRPO** (Shao et al., 2024 — DeepSeek) simplifies PPO for language model training by **removing the critic network entirely**. Instead of learning a value function to estimate advantages, GRPO computes advantages by comparing outputs within a group sampled from the same prompt.
+
+## Motivation
+
+PPO requires a critic $V_\phi(s)$ to compute advantages. For LLMs, this critic:
+- Must be a model comparable in size to the policy (expensive!)
+- Is hard to train well for diverse prompts
+- Adds significant memory and compute overhead
+
+GRPO asks: **can we estimate advantages without a critic?**
+
+## The GRPO Idea
+
+For each prompt $x$, sample a **group** of $G$ outputs from the current policy:
+
+$$
+\{y_1, y_2, \ldots, y_G\} \sim \pi_\theta(\cdot \mid x)
+$$
+
+Score each output with a reward function $R(x, y_i)$, then normalize within the group:
+
+$$
+\hat{A}_i = \frac{R(x, y_i) - \text{mean}(\{R(x, y_j)\}_{j=1}^G)}{\text{std}(\{R(x, y_j)\}_{j=1}^G)}
+$$
+
+This **group-relative advantage** tells us how good each output is *compared to its peers*, without needing any learned baseline.
+
+## The GRPO Objective
+
+GRPO uses a clipped surrogate similar to PPO:
+
+$$
+L^{GRPO}(\theta) = \mathbb{E}_{x} \left[ \frac{1}{G} \sum_{i=1}^{G} \min \left( r_i(\theta) \hat{A}_i, \; \text{clip}(r_i(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_i \right) - \beta \, D_{KL}(\pi_\theta \| \pi_\text{ref}) \right]
+$$
+
+where:
+- $r_i(\theta) = \frac{\pi_\theta(y_i \mid x)}{\pi_{\theta_\text{old}}(y_i \mid x)}$ is the probability ratio for the full output
+- $\beta \, D_{KL}$ is a KL penalty to prevent the policy from drifting too far from a reference model
+
+## Key Differences from PPO
+
+| Aspect | PPO | GRPO |
+|--------|-----|------|
+| Advantage estimation | Learned critic $V_\phi$ | Group normalization |
+| Extra model | Yes (critic) | No |
+| Per-token or per-output | Per-token advantages | Per-output advantages |
+| KL constraint | Clipping only | Clipping + explicit KL penalty |
+| Memory overhead | High (policy + critic) | Lower (policy only) |
+
+:::note[Why this works for LLMs]
+In language model alignment, the reward is typically given for the **complete output** (e.g., human preference rating, correctness score). We don't need per-token advantages — we just need to know which *complete outputs* are better than others. Group comparison provides exactly this signal.
+:::

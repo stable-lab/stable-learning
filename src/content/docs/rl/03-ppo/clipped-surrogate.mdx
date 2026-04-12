@@ -1,0 +1,57 @@
+---
+title: The Clipped Surrogate
+description: Understanding PPO's clipping mechanism
+sidebar:
+  order: 1
+---
+
+import SurrogateObjective from '../../../../components/visualizations/SurrogateObjective';
+
+## How Clipping Works
+
+The PPO objective takes the **minimum** of the unclipped and clipped surrogate:
+
+$$
+L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min \left( r_t(\theta) \hat{A}_t, \; \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]
+$$
+
+Let's break this down for both cases:
+
+### When $\hat{A}_t > 0$ (the action was good)
+
+We want to increase $\pi_\theta(a_t \mid s_t)$, which increases $r_t$. But the clip caps the benefit at $r_t = 1 + \epsilon$:
+
+$$
+L_t = \min(r_t \hat{A}_t, (1+\epsilon) \hat{A}_t) = \begin{cases} r_t \hat{A}_t & \text{if } r_t \leq 1+\epsilon \\ (1+\epsilon)\hat{A}_t & \text{if } r_t > 1+\epsilon \end{cases}
+$$
+
+### When $\hat{A}_t < 0$ (the action was bad)
+
+We want to decrease $\pi_\theta(a_t \mid s_t)$, which decreases $r_t$. The clip prevents over-correction below $r_t = 1 - \epsilon$:
+
+$$
+L_t = \min(r_t \hat{A}_t, (1-\epsilon) \hat{A}_t) = \begin{cases} r_t \hat{A}_t & \text{if } r_t \geq 1-\epsilon \\ (1-\epsilon)\hat{A}_t & \text{if } r_t < 1-\epsilon \end{cases}
+$$
+
+## Interactive: Clipped Objective
+
+Adjust $\epsilon$ and toggle the advantage sign to see how the clipping region changes:
+
+<SurrogateObjective client:only="react" />
+
+:::tip[What to notice]
+- The blue shaded region is the "trust region" where the ratio is allowed to move freely
+- Outside this region, the gradient is zero — the policy update stops
+- Smaller $\epsilon$ means more conservative updates
+- The clipping is **asymmetric** depending on the sign of the advantage
+:::
+
+## Choosing $\epsilon$
+
+| $\epsilon$ | Effect |
+|-------------|--------|
+| 0.1 | Very conservative — slow but stable |
+| 0.2 | Standard (OpenAI default) |
+| 0.3 | More aggressive — faster but riskier |
+
+In practice, $\epsilon = 0.2$ works well across many tasks, including RLHF for language models.

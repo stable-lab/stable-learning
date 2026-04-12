@@ -1,0 +1,43 @@
+---
+title: Cache Fundamentals
+description: Why caching matters and the memory hierarchy
+sidebar:
+  order: 0
+---
+
+Modern processors are dramatically faster than main memory. Without caches, the CPU would spend most of its time waiting for data. The **memory hierarchy** bridges this speed gap with progressively smaller, faster storage levels.
+
+## The Memory Wall
+
+Approximate latencies (2024 numbers):
+
+| Level | Size | Latency | Bandwidth |
+|-------|------|---------|-----------|
+| Register | ~1 KB | ~0.3 ns | — |
+| L1 Cache | 32–64 KB | ~1 ns | ~1 TB/s |
+| L2 Cache | 256 KB–1 MB | ~3–5 ns | ~500 GB/s |
+| L3 Cache | 4–64 MB | ~10–20 ns | ~200 GB/s |
+| DRAM | 8–256 GB | ~50–100 ns | ~50 GB/s |
+| SSD | TBs | ~10–100 μs | ~7 GB/s |
+
+The key insight: **L1 is ~100x faster than DRAM**. Caches exploit **temporal locality** (recently accessed data is likely accessed again) and **spatial locality** (nearby data is likely accessed soon).
+
+## How Caches Work (Overview)
+
+When the CPU reads address $A$:
+
+1. **Hit**: $A$ is in the cache → return data immediately
+2. **Miss**: $A$ is not in the cache → fetch from next level, store in cache, then return
+
+The cache is organized into **cache lines** (typically 64 bytes). Even if you only need 4 bytes, the entire 64-byte line is fetched — this is how spatial locality is exploited.
+
+## Why This Matters for Multicore
+
+When multiple cores each have their own L1/L2 caches but share memory, a fundamental problem arises: **if Core 0 writes to address $A$ and Core 1 has a cached copy of $A$, Core 1's copy is now stale.**
+
+This is the **cache coherence problem**, and solving it requires protocols like MSI and MESI (covered in Section 2).
+
+## What's Next
+
+- **Cache Organization** — how address bits map to cache lines, sets, and ways
+- **Cache Operations** — read/write policies, eviction, and write-back vs write-through

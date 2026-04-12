@@ -1,0 +1,85 @@
+---
+title: MESI & MOESI
+description: Practical coherence protocols with reduced bus traffic
+sidebar:
+  order: 2
+---
+
+import CacheStateViz from '../../../../components/visualizations/CacheStateViz';
+
+## MESI: Adding the Exclusive State
+
+MESI adds a fourth state to MSI:
+
+| State | Meaning | Dirty? | Shared? |
+|-------|---------|--------|---------|
+| **M** (Modified) | Only copy, modified | Yes | No |
+| **E** (Exclusive) | Only copy, clean | No | No |
+| **S** (Shared) | Clean, others may have copies | No | Yes |
+| **I** (Invalid) | Not valid | — | — |
+
+### The Key Optimization
+
+When Core 0 reads a line and **no other cache has it**:
+- **MSI**: goes to S → later write requires BusUpgr (bus transaction)
+- **MESI**: goes to E → later write just transitions E→M silently (**no bus transaction!**)
+
+This **silent upgrade** is a major performance win because many programs read data before writing it, and often only one core accesses a given line.
+
+### How Does the Cache Know?
+
+On a BusRd, the bus has a **SHARED signal**. If any other cache asserts SHARED (they also have the line), the requesting cache goes to S. If nobody asserts SHARED, it goes to E.
+
+## Interactive: Cache State Transitions
+
+Click Read/Write on each core to see MSI and MESI state transitions in action. Watch how the states change and how they coordinate:
+
+<CacheStateViz client:visible />
+
+:::tip[Try these scenarios]
+1. **Read sharing**: Core 0 Read → Core 1 Read (both go to S)
+2. **Write invalidation**: Core 0 Read → Core 1 Read → Core 0 Write (Core 1 gets invalidated)
+3. **MESI silent upgrade**: Switch to MESI → Core 0 Read (goes to E) → Core 0 Write (E→M, no bus traffic)
+4. **Write-back on eviction**: Core 0 Write → Core 1 Read (Core 0 must flush M data)
+:::
+
+## MOESI: Adding the Owned State
+
+MOESI adds a fifth state:
+
+| State | Meaning |
+|-------|---------|
+| **O** (Owned) | This cache has the authoritative copy, but others have S copies. Memory is **stale**. |
+
+### Why Owned?
+
+In MESI, when Core 0 has a line in M and Core 1 reads it:
+1. Core 0 flushes the dirty data to **memory** (expensive write)
+2. Both caches go to S
+
+In MOESI:
+1. Core 0 supplies the data directly to Core 1 (cache-to-cache transfer)
+2. Core 0 goes to **O** (responsible for the data), Core 1 goes to S
+3. Memory is **not updated** — saved a memory write!
+
+The O state means "I'm the owner; if anyone needs this data, I'll supply it. Memory is stale."
+
+### MOESI Summary
+
+| State | Only copy? | Dirty? | Responsible for writeback? |
+|-------|-----------|--------|---------------------------|
+| M | Yes | Yes | Yes (on eviction) |
+| O | No (others in S) | Yes | Yes (on eviction) |
+| E | Yes | No | No |
+| S | No | No | No |
+| I | — | — | — |
+
+## Real-World Usage
+
+| Protocol | Used by |
+|----------|---------|
+| MESI | Intel (with extensions), many embedded |
+| MOESI | AMD (with extensions) |
+| MESIF | Intel server (F = Forward, similar role to O) |
+
+All real implementations add vendor-specific extensions, but the core state machine is recognizable from these standard protocols.

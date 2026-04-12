@@ -1,0 +1,52 @@
+---
+title: Memory Consistency Models
+description: What ordering guarantees does the hardware provide?
+sidebar:
+  order: 0
+---
+
+## Coherence vs. Consistency
+
+**Coherence** (MSI/MESI) guarantees that all cores see the same sequence of values for a **single address**. But what about the order of operations across **different addresses**?
+
+Consider this classic example:
+
+```
+Core 0:           Core 1:
+  x = 1             while (flag == 0) {}
+  flag = 1          print(x)
+```
+
+Coherence guarantees that when Core 1 sees `flag = 1`, it sees the correct value of `flag`. But does it also see `x = 1`? That depends on the **consistency model**.
+
+## What Is a Memory Consistency Model?
+
+A memory consistency model defines the **set of allowed orderings** for memory operations across all cores. It's the contract between hardware and software:
+
+- **Hardware** promises: "I will only reorder operations in these specific ways"
+- **Software** assumes: "I can rely on these ordering guarantees"
+
+The fundamental question: **when Core 0 writes $x$ then writes $y$, does Core 1 see the write to $x$ before the write to $y$?**
+
+## Why Allow Reordering at All?
+
+Modern CPUs use deep pipelines, out-of-order execution, and store buffers for performance. Strict ordering forces the CPU to stall. Relaxing ordering constraints allows:
+
+| Optimization | Requires relaxing |
+|-------------|-------------------|
+| Store buffer | Store → Load ordering |
+| Write combining | Store → Store ordering |
+| Speculative loads | Load → Load ordering |
+| Out-of-order execution | All orderings |
+
+The more reordering the hardware is allowed to do, the faster it can run — but the harder it is for programmers to reason about concurrent code.
+
+## The Spectrum
+
+From strictest to most relaxed:
+
+1. **Sequential Consistency (SC)** — no reordering
+2. **Total Store Order (TSO)** — only Store→Load reordering
+3. **Relaxed models** (ARM, RISC-V) — nearly all reorderings possible
+
+Each step down the spectrum gives hardware more freedom but requires programmers to use **memory fences** to enforce ordering where needed.

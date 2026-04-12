@@ -1,0 +1,82 @@
+---
+title: Action Chains & Rewards
+description: Markov Decision Processes — the foundation of reinforcement learning
+sidebar:
+  order: 0
+---
+
+import ActionChainDemo from '../../../../components/visualizations/ActionChainDemo';
+
+Reinforcement learning is built on the idea of an **agent** interacting with an **environment** over time. At each step, the agent observes a state, takes an action, and receives a reward. This loop — the action chain — is the core abstraction.
+
+## The Markov Decision Process (MDP)
+
+An MDP is defined by the tuple $(S, A, P, R, \gamma)$:
+
+| Symbol | Meaning |
+|--------|---------|
+| $S$ | Set of states |
+| $A$ | Set of actions |
+| $P(s' \mid s, a)$ | Transition probability |
+| $R(s, a)$ | Reward function |
+| $\gamma \in [0, 1)$ | Discount factor |
+
+The **Markov property** means the future depends only on the current state, not on the history:
+
+$$
+P(s_{t+1} \mid s_t, a_t, s_{t-1}, a_{t-1}, \ldots) = P(s_{t+1} \mid s_t, a_t)
+$$
+
+## The Action Chain
+
+A **trajectory** (or episode) is a sequence of states, actions, and rewards:
+
+$$
+\tau = (s_0, a_0, r_0, s_1, a_1, r_1, \ldots, s_T)
+$$
+
+The agent's behavior is governed by a **policy** $\pi(a \mid s)$ — a distribution over actions given a state. The goal of RL is to find the policy that maximizes the expected cumulative reward.
+
+## The Chain Rule of Probability for Trajectories
+
+The probability of a trajectory $\tau$ under policy $\pi$ decomposes by the chain rule:
+
+$$
+P(\tau \mid \pi) = P(s_0) \prod_{t=0}^{T-1} \pi(a_t \mid s_t) \cdot P(s_{t+1} \mid s_t, a_t)
+$$
+
+Breaking this apart:
+
+- $P(s_0)$ — the initial state distribution (given by the environment)
+- $\pi(a_t \mid s_t)$ — the policy's action probability (what we control)
+- $P(s_{t+1} \mid s_t, a_t)$ — the environment's transition dynamics (not in our control)
+
+This factorization is fundamental. When we later derive the **policy gradient**, we'll differentiate $\log P(\tau \mid \pi)$ with respect to the policy parameters $\theta$. The chain rule gives us:
+
+$$
+\log P(\tau \mid \pi_\theta) = \log P(s_0) + \sum_{t=0}^{T-1} \left[ \log \pi_\theta(a_t \mid s_t) + \log P(s_{t+1} \mid s_t, a_t) \right]
+$$
+
+When we take the gradient $\nabla_\theta$, the environment terms vanish (they don't depend on $\theta$), leaving only:
+
+$$
+\nabla_\theta \log P(\tau \mid \pi_\theta) = \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t \mid s_t)
+$$
+
+This is why policy gradient methods work without knowing the environment dynamics — we only need the gradient of our own policy.
+
+## Interactive Demo: Build a Trajectory
+
+Navigate the agent to the goal. Watch how the trajectory $\tau$ and discounted return $G_0$ are constructed step by step:
+
+<ActionChainDemo client:visible />
+
+:::tip[Try different paths]
+The step cost is $-1$, the trap gives $-5$, and the goal gives $+10$. A shorter path gives a higher return — can you find the optimal trajectory?
+:::
+
+## What's Next
+
+In the following pages, we'll look at:
+- **States and Actions** — how to think about the state and action spaces
+- **Rewards and Return** — how rewards accumulate over time, and why discounting matters

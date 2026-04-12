@@ -1,0 +1,56 @@
+---
+title: MSI Protocol
+description: Modified, Shared, Invalid — the basic coherence protocol
+sidebar:
+  order: 1
+---
+
+## Three States
+
+Each cache line is in exactly one of three states:
+
+| State | Meaning | Can read? | Can write? | Memory up-to-date? |
+|-------|---------|-----------|------------|---------------------|
+| **M** (Modified) | This cache has the only valid copy; it's been written | Yes | Yes | No (cache has newer data) |
+| **S** (Shared) | Clean copy; other caches may also have copies | Yes | No (must upgrade first) | Yes |
+| **I** (Invalid) | Not in cache or stale | No | No | — |
+
+## State Transitions
+
+### On a Read (PrRd)
+
+| Current State | Action | Next State |
+|---------------|--------|------------|
+| M | Read hit | M |
+| S | Read hit | S |
+| I (miss) | Issue BusRd; if another cache has M, it flushes → both go S | S |
+
+### On a Write (PrWr)
+
+| Current State | Action | Next State |
+|---------------|--------|------------|
+| M | Write hit | M |
+| S | Issue BusUpgr → invalidate other sharers | M |
+| I (miss) | Issue BusRdX → get line, invalidate others | M |
+
+### On Snooping Bus Signals
+
+| Observed Signal | My State | Action | My New State |
+|-----------------|----------|--------|--------------|
+| BusRd | M | Flush data to bus + memory | S |
+| BusRd | S | No action | S |
+| BusRdX / BusUpgr | M | Flush data to bus + memory | I |
+| BusRdX / BusUpgr | S | — | I |
+
+## The Key Invariant
+
+At any time, for any cache line, exactly one of these is true:
+- **One** cache holds the line in M, and all others are I
+- **Multiple** caches hold the line in S (and memory is up-to-date)
+- **All** caches are I (nobody has the line)
+
+This invariant is what guarantees coherence: there's never a situation where two caches have conflicting data.
+
+## MSI Limitations
+
+MSI has an inefficiency: when a cache reads a line that nobody else has, it goes to **S** even though it's the only copy. If it later writes to that line, it must first issue a BusUpgr (unnecessary bus traffic). The **MESI** protocol fixes this with an **Exclusive** state.

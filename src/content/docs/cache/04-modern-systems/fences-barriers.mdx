@@ -1,0 +1,137 @@
+---
+title: Memory Fences & Barriers
+description: Enforcing ordering in practice — from hardware to software
+sidebar:
+  order: 2
+---
+
+## Why Fences Exist
+
+Relaxed memory models allow the hardware to reorder operations for performance. When ordering **matters** (e.g., publishing data to other threads), the programmer inserts a **fence** (or **barrier**) to prevent specific reorderings.
+
+A fence is essentially saying: "make sure everything before this point is visible before anything after this point."
+
+## Hardware Fence Instructions
+
+### x86
+
+x86-TSO already preserves most orderings. The fences available:
+
+| Instruction | Effect |
+|------------|--------|
+| `MFENCE` | Full fence: orders all loads and stores |
+| `SFENCE` | Store fence: orders stores only |
+| `LFENCE` | Load fence: orders loads only (rarely needed on x86) |
+| `LOCK` prefix | Implicit full fence (e.g., `LOCK XADD`) |
+
+In practice, most x86 synchronization uses `LOCK`-prefixed atomic instructions rather than standalone fences.
+
+### ARM
+
+ARM has a relaxed model, so fences are critical:
+
+| Instruction | Scope |
+|------------|-------|
+| `DMB ISH` | Full barrier (inner shareable domain) |
+| `DMB ISHST` | Store barrier |
+| `DMB ISHLD` | Load barrier |
+| `LDAR` | Load-acquire (barrier after the load) |
+| `STLR` | Store-release (barrier before the store) |
+
+`LDAR`/`STLR` are more efficient than `DMB` because they only order with respect to a single operation, not globally.
+
+### RISC-V (RVWMO)
+
+RISC-V uses a flexible fence instruction:
+
+```
+fence [predecessor], [successor]
+```
+
+where predecessors and successors are subsets of `{r, w, i, o}` (read, write, input, output):
+
+| Example | Meaning |
+|---------|---------|
+| `fence rw, rw` | Full fence |
+| `fence w, w` | Store fence |
+| `fence r, r` | Load fence |
+| `fence w, r` | Drain store buffer before loads (like x86 MFENCE) |
+
+## Software Memory Orders
+
+C++, Rust, and Java provide **memory order** annotations that the compiler maps to appropriate hardware fences:
+
+### C++ `std::memory_order`
+
+| Order | Meaning | x86 cost | ARM cost |
+|-------|---------|----------|----------|
+| `relaxed` | No ordering, just atomicity | Free | Free |
+| `acquire` | No reads/writes reordered before this load | Free (TSO) | `LDAR` |
+| `release` | No reads/writes reordered after this store | Free (TSO) | `STLR` |
+| `acq_rel` | Both acquire and release | Free (TSO) | `LDAR`/`STLR` |
+| `seq_cst` | Full sequential consistency | `LOCK` or `MFENCE` | `DMB ISH` + `LDAR`/`STLR` |
+
+:::note[x86 Gets Acquire-Release for Free]
+Because TSO already forbids Load→Load, Load→Store, and Store→Store reorderings, `acquire` and `release` compile to **plain loads and stores** on x86. Only `seq_cst` needs an actual fence. This is why many concurrent programs work correctly on x86 even with bugs — TSO is forgiving. Those same bugs surface on ARM.
+:::
+
+## Common Patterns
+
+### Spinlock
+
+```cpp
+// Acquire the lock
+while (lock.exchange(1, std::memory_order_acquire) == 1) {}
+// Critical section — all accesses ordered after acquire
+// ...
+// Release the lock
+lock.store(0, std::memory_order_release);
+// All accesses ordered before release
+```
+
+### Producer-Consumer (flag-based)
+
+```cpp
+// Producer (Core 0)
+data = compute();                           // write data
+flag.store(1, std::memory_order_release);   // publish
+
+// Consumer (Core 1)
+while (flag.load(std::memory_order_acquire) == 0) {}  // wait
+use(data);  // guaranteed to see producer's write to data
+```
+
+The release-acquire pair creates a **happens-before** relationship: everything before the release is visible after the acquire.
+
+### Double-Checked Locking
+
+```cpp
+std::atomic<Singleton*> instance{nullptr};
+std::mutex mtx;
+
+Singleton* get_instance() {
+    auto* p = instance.load(std::memory_order_acquire);
+    if (!p) {
+        std::lock_guard lock(mtx);
+        p = instance.load(std::memory_order_relaxed);
+        if (!p) {
+            p = new Singleton();
+            instance.store(p, std::memory_order_release);
+        }
+    }
+    return p;
+}
+```
+
+Without proper memory orders, another thread could see the pointer before the constructor's writes are visible — a classic bug on ARM.
+
+## Connection to the Learning Path
+
+Looking back at our progression:
+
+1. **Cache fundamentals** gave us the memory hierarchy and locality concepts
+2. **Coherence protocols** (MSI/MESI) ensure a single address is consistent across caches
+3. **Consistency models** define what orderings are allowed across multiple addresses
+4. **Fences and barriers** let programmers enforce the orderings they need within the guarantees of their target consistency model
+
+Understanding this full stack — from cache lines to memory orders — is essential for writing correct and performant concurrent code.

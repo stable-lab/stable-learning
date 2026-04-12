@@ -1,0 +1,48 @@
+---
+title: The Coherence Problem
+description: Why multiple caches need coordination
+sidebar:
+  order: 0
+---
+
+## The Problem
+
+Consider two cores, each with a private L1 cache, sharing main memory:
+
+1. Core 0 reads address $A$ → cached in Core 0's L1
+2. Core 1 reads address $A$ → cached in Core 1's L1
+3. Core 0 writes $A = 7$ → **Core 0's cache is updated, but Core 1 still sees the old value**
+
+This is a **coherence violation**: two caches disagree on the value at the same address. Without a protocol to manage this, multicore systems would produce incorrect results.
+
+## What Coherence Guarantees
+
+A coherent memory system must satisfy:
+
+1. **Write propagation**: A write to $A$ by any core must eventually become visible to all cores
+2. **Write serialization**: All cores observe writes to the same address in the same order
+
+These guarantee that there is a single, consistent view of memory — even though data is replicated across caches.
+
+## Coherence Mechanisms
+
+| Mechanism | How it works | Scalability |
+|-----------|-------------|-------------|
+| **Snooping** | All caches monitor (snoop) a shared bus for transactions | Good for 2–8 cores; bus becomes bottleneck |
+| **Directory-based** | A central directory tracks which caches hold each line | Scales to many cores; higher per-operation latency |
+
+Most desktop/laptop CPUs use **snooping** (simpler, lower latency for small core counts). Server chips with many cores often use **directory-based** protocols.
+
+## Coherence vs. Consistency
+
+These are often confused but are distinct concepts:
+
+- **Coherence**: guarantees about a **single address** — all cores see the same sequence of values for address $A$
+- **Consistency**: guarantees about **multiple addresses** — the order in which writes to different addresses become visible
+
+Coherence is the mechanism (MSI, MESI). Consistency is the contract (Sequential Consistency, TSO). We cover consistency models in Section 3.
+
+## What's Next
+
+- **MSI Protocol** — the simplest coherence protocol with three states
+- **MESI & MOESI** — practical extensions that reduce bus traffic

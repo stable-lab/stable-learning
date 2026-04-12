@@ -1,0 +1,48 @@
+---
+title: States and Actions
+description: Understanding the state space, action space, and policies
+sidebar:
+  order: 1
+---
+
+## State Space
+
+A **state** $s \in S$ captures everything the agent needs to make a decision. In practice, states can be:
+
+- **Discrete** — e.g., grid positions in a maze, board configurations in a game
+- **Continuous** — e.g., joint angles and velocities of a robot, pixel values in an image
+
+The key requirement is the Markov property: the state must contain enough information to predict the future without knowing the past.
+
+:::tip[Observation vs. State]
+In many real-world problems, the agent doesn't observe the full state. When the observation $o_t$ is a partial view of $s_t$, we have a **Partially Observable MDP** (POMDP). Most practical deep RL algorithms treat observations as if they were states.
+:::
+
+## Action Space
+
+The **action space** $A$ defines what the agent can do:
+
+- **Discrete actions** — e.g., move left/right/up/down, select a token from vocabulary
+- **Continuous actions** — e.g., torque applied to a joint, steering angle
+
+For language models, the action space is the vocabulary — at each step, the model selects a token.
+
+## Policy
+
+The **policy** $\pi_\theta(a \mid s)$ maps states to a distribution over actions. It's parameterized by $\theta$ (e.g., the weights of a neural network).
+
+- **Deterministic policy**: $a = \mu_\theta(s)$
+- **Stochastic policy**: $a \sim \pi_\theta(\cdot \mid s)$
+
+In deep RL, the policy is typically a neural network. For language models, the policy **is** the model — it outputs a probability distribution over the next token given the context.
+
+## The Agent-Environment Loop
+
+At each timestep $t$:
+
+1. Agent observes state $s_t$
+2. Agent samples action $a_t \sim \pi_\theta(\cdot \mid s_t)$
+3. Environment transitions to $s_{t+1} \sim P(\cdot \mid s_t, a_t)$
+4. Agent receives reward $r_t = R(s_t, a_t)$
+
+This loop repeats until a terminal state is reached (episodic) or continues forever (continuing).

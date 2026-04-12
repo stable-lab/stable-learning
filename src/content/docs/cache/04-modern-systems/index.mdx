@@ -1,0 +1,61 @@
+---
+title: Modern Coherence Systems
+description: Directory-based protocols and scalability tradeoffs
+sidebar:
+  order: 0
+---
+
+## Snooping vs. Directory-Based
+
+The MSI/MESI protocols we studied use **snooping**: every cache watches a shared bus for coherence messages. This has a fundamental scalability problem — the bus becomes a bottleneck as core count increases.
+
+### Snooping
+
+```
+Core 0   Core 1   Core 2   Core 3
+  |        |        |        |
+  └────────┴────────┴────────┘
+              Shared Bus
+```
+
+- Every coherence message is broadcast to **all** caches
+- Each cache must check if the message is relevant
+- Bus bandwidth is shared — $O(N)$ listeners per message
+- Works well for 2–8 cores
+
+### Directory-Based
+
+```
+Core 0   Core 1   Core 2   Core 3
+  |        |        |        |
+  └────────┴────────┴────────┘
+           Directory / NoC
+      (tracks who has what)
+```
+
+- A **directory** records which caches hold each line
+- Coherence messages are sent only to relevant caches (point-to-point)
+- Uses a **Network-on-Chip** (NoC) instead of a shared bus
+- Scales to dozens or hundreds of cores
+
+## Tradeoffs
+
+| Aspect | Snooping | Directory |
+|--------|----------|-----------|
+| Latency | Lower (broadcast is immediate) | Higher (lookup directory first) |
+| Bandwidth | $O(N)$ per operation | $O(1)$ per operation |
+| Scalability | Poor (8–16 cores max) | Good (100s of cores) |
+| Complexity | Simpler | More complex |
+| Storage overhead | None | Directory entries per cache line |
+
+## Real-World Examples
+
+| Processor | Cores | Protocol |
+|-----------|-------|----------|
+| Intel Core (desktop) | 4–24 | Ring bus with snoop filter |
+| Intel Xeon (server) | 28–60 | Mesh interconnect, directory-based |
+| AMD EPYC | 64–128 | Infinity Fabric, directory-based |
+| Apple M-series | 8–24 | Custom interconnect |
+| ARM Neoverse | 64–128 | CMN (Coherent Mesh Network), directory |
+
+Modern designs often **combine** approaches: use snooping within a cluster of cores and directory-based protocol between clusters.

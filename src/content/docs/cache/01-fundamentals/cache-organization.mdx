@@ -1,0 +1,68 @@
+---
+title: Cache Organization
+description: Cache lines, sets, ways, and address mapping
+sidebar:
+  order: 1
+---
+
+## Cache Lines
+
+The cache is divided into fixed-size blocks called **cache lines** (typically 64 bytes on x86). Each line stores:
+
+- **Data** — the 64-byte block from memory
+- **Tag** — the high-order address bits identifying which memory block is stored
+- **Valid bit** — whether the line contains valid data
+- **Dirty bit** — whether the data has been modified (for write-back caches)
+
+## Address Decomposition
+
+Given a memory address, the cache hardware splits it into three parts:
+
+$$
+\underbrace{\text{Tag}}_{t \text{ bits}} \;\; \underbrace{\text{Index}}_{s \text{ bits}} \;\; \underbrace{\text{Offset}}_{b \text{ bits}}
+$$
+
+- **Offset** ($b$ bits): selects the byte within the cache line. For 64-byte lines, $b = 6$.
+- **Index** ($s$ bits): selects which **set** in the cache to check. With $S$ sets, $s = \log_2 S$.
+- **Tag** ($t$ bits): the remaining bits, used to verify if the correct block is stored.
+
+## Cache Associativity
+
+The **associativity** determines how many lines can map to the same set:
+
+### Direct-Mapped ($W = 1$)
+
+Each memory block maps to exactly **one** cache line. Simple and fast, but vulnerable to **conflict misses** when two frequently used addresses map to the same index.
+
+```
+Address → Index → Check tag → Hit or miss
+```
+
+### Set-Associative ($W = 2, 4, 8, \ldots$)
+
+Each set contains $W$ **ways**. A memory block can go in any of the $W$ lines in its set. This reduces conflict misses at the cost of comparing $W$ tags in parallel.
+
+For a cache with $C$ bytes, $L$-byte lines, and $W$-way associativity:
+$$
+S = \frac{C}{L \times W} \quad \text{(number of sets)}
+$$
+
+### Fully Associative ($S = 1$)
+
+A block can go **anywhere** in the cache. No conflict misses, but requires comparing against every tag — expensive and typically only used for small caches (e.g., TLBs).
+
+## Example: 32 KB, 8-way, 64-byte lines
+
+$$
+S = \frac{32{,}768}{64 \times 8} = 64 \text{ sets}
+$$
+
+- Offset: $b = \log_2 64 = 6$ bits
+- Index: $s = \log_2 64 = 6$ bits
+- Tag: remaining address bits (e.g., $48 - 6 - 6 = 36$ bits for 48-bit addresses)
+
+:::tip[Common Configurations]
+- **L1**: 32–64 KB, 8-way, 64-byte lines. Optimized for latency (~1 ns).
+- **L2**: 256 KB–1 MB, 8–16-way. Balance of size and speed.
+- **L3**: 4–64 MB, 12–16-way, shared across cores. Optimized for hit rate.
+:::

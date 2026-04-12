@@ -1,0 +1,115 @@
+---
+title: Policy Gradient Methods
+description: Directly optimizing the policy with gradient ascent
+sidebar:
+  order: 0
+---
+
+Instead of learning a value function and deriving a policy from it (as in Q-learning), **policy gradient methods** directly optimize the policy parameters $\theta$ to maximize expected return.
+
+## The Objective
+
+We want to find $\theta$ that maximizes:
+
+$$
+J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ R(\tau) \right] = \sum_{\tau} P(\tau \mid \theta) \, R(\tau)
+$$
+
+where $R(\tau) = \sum_{t=0}^{T} \gamma^t r_t$ is the total (discounted) return of trajectory $\tau$.
+
+The idea: compute the gradient $\nabla_\theta J(\theta)$ and update $\theta$ in the direction that increases $J$.
+
+## Deriving the Policy Gradient
+
+Starting from the definition:
+
+$$
+\nabla_\theta J(\theta) = \nabla_\theta \sum_{\tau} P(\tau \mid \theta) \, R(\tau) = \sum_{\tau} \nabla_\theta P(\tau \mid \theta) \, R(\tau)
+$$
+
+Here's the problem: $\nabla_\theta P(\tau \mid \theta)$ is hard to compute directly because $P(\tau \mid \theta)$ involves the environment dynamics. We need a trick.
+
+### The Log-Derivative Trick
+
+The key identity: for any function $f(x) > 0$,
+
+$$
+\nabla_x \log f(x) = \frac{\nabla_x f(x)}{f(x)}
+$$
+
+Rearranging:
+
+$$
+\nabla_x f(x) = f(x) \, \nabla_x \log f(x)
+$$
+
+Apply this to $P(\tau \mid \theta)$:
+
+$$
+\nabla_\theta P(\tau \mid \theta) = P(\tau \mid \theta) \, \nabla_\theta \log P(\tau \mid \theta)
+$$
+
+Substituting back:
+
+$$
+\nabla_\theta J(\theta) = \sum_{\tau} P(\tau \mid \theta) \, \nabla_\theta \log P(\tau \mid \theta) \, R(\tau) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \nabla_\theta \log P(\tau \mid \theta) \, R(\tau) \right]
+$$
+
+This is powerful: we've turned a sum weighted by $\nabla_\theta P$ into an **expectation under $P$** itself — something we can estimate by sampling trajectories.
+
+### Expanding the Log-Probability
+
+Recall the chain rule factorization from the action chain section:
+
+$$
+P(\tau \mid \theta) = P(s_0) \prod_{t=0}^{T-1} \pi_\theta(a_t \mid s_t) \cdot P(s_{t+1} \mid s_t, a_t)
+$$
+
+Taking the log:
+
+$$
+\log P(\tau \mid \theta) = \underbrace{\log P(s_0)}_{\text{no } \theta} + \sum_{t=0}^{T-1} \Big[ \log \pi_\theta(a_t \mid s_t) + \underbrace{\log P(s_{t+1} \mid s_t, a_t)}_{\text{no } \theta} \Big]
+$$
+
+Taking the gradient $\nabla_\theta$, **all environment terms vanish**:
+
+$$
+\nabla_\theta \log P(\tau \mid \theta) = \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t \mid s_t)
+$$
+
+### The Policy Gradient Theorem
+
+Combining everything:
+
+$$
+\boxed{ \nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot G_t \right] }
+$$
+
+where $G_t = \sum_{k=t}^{T} \gamma^{k-t} r_k$ is the return from timestep $t$.
+
+:::note[Why $G_t$ instead of $R(\tau)$?]
+Using the full trajectory return $R(\tau)$ for every timestep works but has higher variance. Since actions at time $t$ cannot affect rewards before time $t$, we can replace $R(\tau)$ with the **future return** $G_t$. This is called the "reward-to-go" trick and reduces variance without introducing bias.
+:::
+
+## Why the Log Trick Matters
+
+The log-derivative trick is not specific to RL — it's a general technique called the **score function estimator** (or **REINFORCE estimator** or **likelihood ratio trick**) used throughout machine learning:
+
+| Application | What plays the role of $\pi_\theta$ | What plays the role of $R(\tau)$ |
+|------------|--------------------------------------|----------------------------------|
+| RL policy gradient | Policy $\pi_\theta(a \mid s)$ | Return $G_t$ |
+| Variational inference | Variational distribution $q_\theta(z)$ | ELBO signal |
+| Black-box optimization | Sampling distribution | Objective value |
+
+The pattern is always the same: to differentiate an expectation over a distribution you control, use $\nabla_\theta \mathbb{E}_{x \sim p_\theta}[f(x)] = \mathbb{E}_{x \sim p_\theta}[\nabla_\theta \log p_\theta(x) \cdot f(x)]$.
+
+## Why Policy Gradients?
+
+| Advantage | Explanation |
+|-----------|-------------|
+| Handles continuous actions | No need for argmax over actions |
+| Can learn stochastic policies | Useful for exploration and partially observable environments |
+| Directly optimizes what we care about | No approximation errors from value functions |
+| Model-free | Environment dynamics cancel out in the gradient |
+
+The main downside is **high variance** in the gradient estimate, which we'll address with baselines in the next pages.

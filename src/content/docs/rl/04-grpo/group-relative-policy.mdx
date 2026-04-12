@@ -1,0 +1,92 @@
+---
+title: Group-Relative Advantages
+description: How GRPO estimates advantages without a critic
+sidebar:
+  order: 1
+---
+
+import GRPOComparison from '../../../../components/visualizations/GRPOComparison';
+
+## The Group Sampling Procedure
+
+For each training prompt $x$:
+
+1. **Sample** $G$ complete outputs: $y_1, \ldots, y_G \sim \pi_{\theta_\text{old}}(\cdot \mid x)$
+2. **Score** each output: $r_i = R(x, y_i)$
+3. **Normalize** rewards within the group:
+
+$$
+\hat{A}_i = \frac{r_i - \mu_G}{\sigma_G}
+$$
+
+where $\mu_G = \frac{1}{G}\sum_{j=1}^G r_j$ and $\sigma_G = \sqrt{\frac{1}{G}\sum_{j=1}^G (r_j - \mu_G)^2}$.
+
+## Interactive: Group vs. Value Baseline
+
+Compare how GRPO's group-relative advantages differ from PPO's value-function baseline. The bars show raw rewards; the lines show the resulting advantages:
+
+<GRPOComparison client:only="react" />
+
+:::tip[What to notice]
+- GRPO advantages (blue) are always centered around zero — some outputs are "above average" and some "below average" within the group
+- PPO advantages (orange) depend on a fixed baseline $V(s)$, which may be inaccurate
+- Changing the group size $G$ affects the quality of the normalization — larger groups give more stable estimates
+- Click "New group" to see different reward distributions
+:::
+
+## Why Group Normalization Works
+
+The group mean $\mu_G$ serves the same role as the critic baseline $V(s)$ in PPO:
+
+$$
+\underbrace{\hat{A}_i^{GRPO} = \frac{r_i - \mu_G}{\sigma_G}}_{\text{group relative}} \quad \leftrightarrow \quad \underbrace{\hat{A}_t^{PPO} = G_t - V_\phi(s_t)}_{\text{critic baseline}}
+$$
+
+But the group mean is:
+- **Free to compute** — no extra neural network needed
+- **Adaptive** — automatically adjusts per prompt (hard prompts have lower mean, easy prompts have higher mean)
+- **Unbiased** — no function approximation error
+
+The standard deviation normalization $\sigma_G$ additionally stabilizes training by keeping advantage magnitudes consistent across prompts.
+
+## The KL Penalty
+
+GRPO adds an explicit KL divergence penalty to the objective:
+
+$$
+D_{KL}(\pi_\theta \| \pi_\text{ref}) = \mathbb{E}_{y \sim \pi_\theta} \left[ \log \frac{\pi_\theta(y \mid x)}{\pi_\text{ref}(y \mid x)} \right]
+$$
+
+This prevents the policy from deviating too far from the reference (usually the SFT model). In practice, DeepSeek uses a per-token KL approximation:
+
+$$
+D_{KL}^{(t)} \approx \frac{\pi_\text{ref}(a_t \mid s_t)}{\pi_\theta(a_t \mid s_t)} - \log \frac{\pi_\text{ref}(a_t \mid s_t)}{\pi_\theta(a_t \mid s_t)} - 1
+$$
+
+## GRPO Algorithm Summary
+
+```
+Initialize policy π_θ from SFT model, set π_ref = π_θ
+for each iteration:
+    Sample batch of prompts {x₁, ..., x_B}
+    for each prompt x:
+        Sample G outputs: y₁, ..., y_G ~ π_θ_old(·|x)
+        Score: rᵢ = R(x, yᵢ)
+        Normalize: Âᵢ = (rᵢ - mean) / std
+    for each mini-batch epoch:
+        Compute clipped surrogate with Â
+        Add KL penalty: L = L_clip - β·D_KL
+        Update θ to maximize L
+    θ_old ← θ
+```
+
+## Connection to the Learning Path
+
+Looking back at our progression:
+
+1. **Action chains** gave us the MDP framework and the concept of return
+2. **Policy gradients** showed how to optimize a policy directly
+3. **PPO** stabilized updates with clipping and used GAE for advantage estimation
+4. **GRPO** simplified the pipeline by replacing the learned critic with group-relative normalization
+
+Each step builds on the last — GRPO is best understood as "PPO without the critic, made possible by sampling multiple outputs per prompt."

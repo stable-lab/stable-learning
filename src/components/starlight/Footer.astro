@@ -1,0 +1,45 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<footer class="site-footer">
+  <div class="footer-content">
+    <img src="/stable-logo.jpeg" alt="Stable Lab" class="footer-logo" />
+    <p>&copy; {new Date().getFullYear()} Stable Lab. All rights reserved.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 3rem;
+    padding: 3rem 1rem 4rem;
+    border-top: 1px solid var(--sl-color-gray-5);
+    text-align: center;
+    min-height: 40vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .footer-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 0.5rem;
+    opacity: 0.8;
+  }
+
+  .site-footer p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--sl-color-gray-3);
+  }
+</style>

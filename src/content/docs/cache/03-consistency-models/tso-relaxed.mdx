@@ -1,0 +1,112 @@
+---
+title: TSO & Relaxed Models
+description: Real-world memory models from x86 to ARM
+sidebar:
+  order: 2
+---
+
+import MemoryOrderViz from '../../../../components/visualizations/MemoryOrderViz';
+
+## Total Store Order (TSO)
+
+**TSO** relaxes exactly one ordering: **Store → Load**. A store can be delayed (sitting in the store buffer) while subsequent loads execute.
+
+### The Store Buffer
+
+Each core has a **store buffer** — a FIFO queue of pending writes:
+
+1. When the CPU executes a store, it goes into the store buffer (fast, no memory access)
+2. The store buffer drains to the cache/memory asynchronously
+3. Loads check the store buffer first (store-buffer forwarding), then the cache
+
+This means a core can see its own stores immediately, but other cores see them later. That's the Store→Load reorder.
+
+### TSO Guarantees
+
+| Preserved | Reason |
+|-----------|--------|
+| Load → Load | Loads are not reordered with each other |
+| Load → Store | A load completes before a subsequent store |
+| Store → Store | Store buffer is FIFO — stores drain in order |
+
+| Relaxed | Reason |
+|---------|--------|
+| Store → Load | Store sits in buffer; subsequent load executes from cache |
+
+### x86-TSO
+
+x86 processors implement TSO (Intel formalized this as the **x86-TSO** model). This is why most concurrent programs "just work" on x86 — TSO is close enough to SC that only subtle patterns break.
+
+The one dangerous pattern:
+
+```
+Core 0:           Core 1:
+  x = 1             y = 1
+  r0 = y            r1 = x
+
+Under TSO: r0=0 AND r1=0 IS possible!
+```
+
+Both stores can be in their respective store buffers when the loads execute.
+
+## Relaxed Models (ARM, RISC-V)
+
+ARM and RISC-V allow **all four reorderings** by default:
+
+| Reordering | ARM | x86 |
+|-----------|-----|-----|
+| Store → Load | Allowed | Allowed |
+| Store → Store | Allowed | **Forbidden** |
+| Load → Store | Allowed | **Forbidden** |
+| Load → Load | Allowed | **Forbidden** |
+
+### Why So Relaxed?
+
+ARM's big.LITTLE designs and RISC-V's diverse implementations benefit from maximum flexibility. The hardware can:
+
+- Reorder loads to hide memory latency
+- Coalesce or reorder stores for efficiency
+- Speculate more aggressively
+
+The tradeoff: programmers must use **explicit fence instructions** whenever ordering matters.
+
+## Interactive: Compare Consistency Models
+
+Select a model to see which reorderings are allowed:
+
+<MemoryOrderViz client:visible />
+
+## Memory Fences
+
+To enforce ordering on relaxed architectures, use **fence** (barrier) instructions:
+
+| Architecture | Full fence | Store fence | Load fence |
+|-------------|-----------|------------|-----------|
+| x86 | `MFENCE` | `SFENCE` | `LFENCE` |
+| ARM | `DMB ISH` | `DMB ISHST` | `DMB ISHLD` |
+| RISC-V | `fence rw, rw` | `fence w, w` | `fence r, r` |
+
+### Acquire-Release Semantics
+
+Modern programming models use **acquire** and **release** rather than raw fences:
+
+- **Acquire** (on load): no subsequent memory operation can be reordered before this load
+- **Release** (on store): no preceding memory operation can be reordered after this store
+
+```cpp
+// C++ example
+flag.store(1, std::memory_order_release);  // all prior writes visible
+// ...
+while (flag.load(std::memory_order_acquire) == 0) {}  // all subsequent reads see prior writes
+```
+
+This maps directly to hardware:
+- x86: acquire/release are **free** (TSO provides them naturally)
+- ARM: acquire uses `LDAR`, release uses `STLR` (special instructions)
+- RISC-V: acquire/release fence annotations
+
+:::tip[Rule of Thumb]
+- Writing for **x86 only**: you rarely need explicit fences (TSO handles most cases)
+- Writing for **ARM/RISC-V**: always use `std::atomic` with proper memory orders; never assume ordering
+- Writing **portable code**: use the C++/Rust memory model; the compiler inserts the right fences
+:::
