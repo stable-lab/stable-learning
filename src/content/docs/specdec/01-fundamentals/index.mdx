@@ -1,0 +1,53 @@
+---
+title: Speculative Decoding
+description: Draft cheaply, verify in bulk, change nothing about the output
+sidebar:
+  order: 0
+---
+
+import SpecDecodeLive from '../../../../components/visualizations/SpecDecodeLive';
+
+Autoregressive decoding has an absurd cost structure. To emit **one** token, a 70B model streams every one of its weights from HBM through the GPU — and then does it again for the next token. At generation time the arithmetic units are mostly idle: decoding is **memory-bound**, so a forward pass over *one* token and a forward pass over *five* tokens take nearly the same wall-clock time. The model can *check* five tokens for the price of one; it just can't *guess* them.
+
+Speculative decoding exploits exactly that asymmetry: let something small and fast guess, and let the big model check the whole guess in a single pass.
+
+<SpecDecodeLive client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Two lanes generating the same text. The gray lane is ordinary autoregressive decoding: one token per target-model pass. The blue lane drafts γ tokens with a cheap model (dashed cells, cost c each), then resolves them all in one target pass: the correct prefix is kept (green), the first wrong token is replaced by the verifier's own token (amber), and a fully-correct draft earns a bonus token. α is the chance each drafted token survives.
+
+**Knobs.** α is draft quality, γ is how far ahead the drafter runs, c is the drafter's cost relative to one target pass. The *theory* chip shows the closed-form speedup for the current knobs; the *speedup* chip is what's actually happening.
+
+**Try this.** Watch the *target passes* chip — the speculative lane produces the same text with a fraction of the big-model passes. Then push γ to 8 with α at 0.3 and c at 0.3: most drafts die (see *drafts wasted*), each cycle pays for eight guesses and keeps one or two, and the speedup drops **below 1×** — speculation made things slower. Every design in this track is about keeping α high and c low enough to stay far from that regime.
+</div>
+
+## The Loop
+
+One cycle of speculative decoding, with target model $p$ and draft model $q$:
+
+1. **Draft.** Run $q$ autoregressively for $\gamma$ steps: $x_1, \ldots, x_\gamma \sim q$.
+2. **Verify.** Run $p$ **once** over the whole draft. Because the transformer is parallel across positions, this single pass yields $p(\cdot \mid \text{prefix}, x_1, \ldots, x_{i-1})$ for *every* position $i$ simultaneously.
+3. **Accept.** Walk the draft left to right, accepting each token with probability $\min(1, p_i/q_i)$ (next page). The first rejection truncates the draft — but the verify pass already computed the distribution at that position, so the rejected token is **replaced for free**. If all $\gamma$ survive, the verify pass supplies one extra token.
+
+Every cycle therefore emits between $1$ and $\gamma + 1$ tokens for exactly **one** target pass, and — this is the part that sounds too good to be true — the output is distributed *exactly* as if the target model had generated every token itself. The next page proves it.
+
+## Why Verification Is Almost Free
+
+A decode step's latency is dominated by reading weights (and KV cache) from memory, not by arithmetic. Verifying $\gamma + 1$ positions reuses the *same* weight reads and adds only a little extra compute per position — precisely the resource decoding leaves idle. This is also the fine print: the free lunch exists only while you are memory-bound. Batch enough concurrent requests and verification's extra compute starts to bite — that regime is where [DSpark](../03-parallel-drafting/dspark/) operates, at the end of this track.
+
+:::caution[Common misconception: "Speculative decoding trades a bit of quality for speed."]
+It trades **compute** for **latency**, never quality. The acceptance rule guarantees the output distribution is *identical* to standard sampling from the target — not approximately, exactly, at any temperature. A worse drafter produces a *slower* system, not a *worse* model. (Lossy variants do exist — top-1 matching, typical acceptance — but the baseline algorithm, and everything in this track, is lossless.)
+:::
+
+## Where This Track Goes
+
+- **[The Lossless Acceptance Rule](rejection-sampling/)** — the two-line rule and its proof, run empirically.
+- **[The Speedup Arithmetic](speedup-model/)** — when speculation wins, and by how much.
+- **[Tree Verification](tree-verification/)** — one pass, many futures: the attention mask that verifies a whole draft tree at once.
+- **[The EAGLE line](../02-eagle/)** — making α large: draft from the target's own features.
+- **[Parallel drafting](../03-parallel-drafting/)** — making c tiny (DFlash) and verification load-aware (DSpark).
+
+## References
+
+- Leviathan, Kalman, Matias. *Fast Inference from Transformers via Speculative Decoding.* ICML 2023. [arXiv:2211.17192](https://arxiv.org/abs/2211.17192)
+- Chen et al. *Accelerating Large Language Model Decoding with Speculative Sampling.* [arXiv:2302.01318](https://arxiv.org/abs/2302.01318)

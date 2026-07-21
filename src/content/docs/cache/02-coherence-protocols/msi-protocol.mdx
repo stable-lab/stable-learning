@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import MSIWalker from '../../../../components/visualizations/MSIWalker';
+
 ## Three States
 
 Each cache line is in exactly one of three states:
@@ -50,6 +52,34 @@ At any time, for any cache line, exactly one of these is true:
 - **All** caches are I (nobody has the line)
 
 This invariant is what guarantees coherence: there's never a situation where two caches have conflicting data.
+
+## Interactive: Apply Your Own Operations
+
+Pick a read/write and a core, click Apply. The widget shows the resulting state vector and the bus traffic. The bottom invariant box confirms MSI's key safety property after every step.
+
+<MSIWalker client:only="react" />
+
+:::caution[Common misconception: "MSI is correct because the protocol diagram is correct."]
+MSI is correct *only because of the bus's serializing property*. The protocol diagram doesn't enforce anything by itself — it relies on the assumption that every cache sees the same sequence of bus transactions in the same order. On a system with a non-totally-ordered interconnect (e.g., a mesh NoC), the same per-cache state machine would be unsafe; you need ordering at the interconnect layer or a directory to re-impose serialization. MSI's textbook diagram quietly assumes "shared bus" — directory protocols look superficially similar but carry significantly more bookkeeping.
+:::
+
+## Worked Example: Three Cores, One Cache Line
+
+Trace the state and bus traffic for a sequence on line A, starting with everyone in I. Each row is one operation; we track who has the line in what state.
+
+| # | Operation | Bus | Core 0 | Core 1 | Core 2 |
+|---|-----------|-----|--------|--------|--------|
+| 0 | initial | — | I | I | I |
+| 1 | Core 0 reads A | BusRd | **S** (memory supplies) | I | I |
+| 2 | Core 1 reads A | BusRd | S | **S** | I |
+| 3 | Core 2 reads A | BusRd | S | S | **S** |
+| 4 | Core 0 writes A | BusUpgr → Inv | **M** | I | I |
+| 5 | Core 1 reads A | BusRd → flush by Core 0 | S (flushed, mem now fresh) | **S** | I |
+| 6 | Core 2 writes A | BusRdX → Inv | I | I | **M** |
+
+Five bus transactions for six accesses — and that **single write at step 4** by itself broadcast invalidations to *both* other caches even though they were only reading. Now imagine 32 cores were all sharing the line in S: that one write costs 31 invalidation messages.
+
+This is the classic argument for **read-mostly data being a coherence bargain** and **shared-mutable data being a coherence disaster**. MESI's E state will save one BusUpgr on step 4 *only if Core 0 was the sole reader to begin with* — which it isn't here (three sharers).
 
 ## MSI Limitations
 

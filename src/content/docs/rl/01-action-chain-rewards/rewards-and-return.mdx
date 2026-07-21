@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import DiscountExplorer from '../../../../components/visualizations/DiscountExplorer';
+
 ## Reward Signal
 
 The **reward** $r_t = R(s_t, a_t)$ is a scalar signal that tells the agent how good its action was. Rewards can be:
@@ -42,6 +44,24 @@ where $\gamma \in [0, 1)$. The discount factor controls:
 
 With constant reward $r = 1$, the return converges to $\frac{1}{1 - \gamma}$.
 
+### Worked Example
+
+Sparse-reward episode with $r = [0, 0, 0, 0, 0, 0, 0, 0, 0, +1]$ (reward only at $t = 9$):
+
+| $\gamma$ | $G_0 = \gamma^9$ | Effective horizon $1/(1-\gamma)$ |
+|----------|--------------------|----------------------------------|
+| 0.5 | $0.5^9 \approx 0.002$ | 2 steps |
+| 0.9 | $0.9^9 \approx 0.387$ | 10 steps |
+| 0.99 | $0.99^9 \approx 0.914$ | 100 steps |
+
+At $\gamma = 0.5$ the agent's gradient signal at $t=0$ is essentially zero — the reward is "out of view." This is one of the reasons sparse-reward RL is hard: pick $\gamma$ smaller than the actual reward horizon and the problem becomes unlearnable, even with a perfect algorithm.
+
+### Interactive: Edit a Reward Sequence
+
+Add/remove timesteps, type rewards, slide $\gamma$. The three plotted curves are $G_t$ under $\gamma \in \{0.5, \text{your }\gamma, 0.99\}$. Try a reward at $t=20$ with $\gamma = 0.9$ — see how $G_0$ practically vanishes.
+
+<DiscountExplorer client:only="react" />
+
 ## Value Functions
 
 The **state-value function** $V^\pi(s)$ is the expected return from state $s$ under policy $\pi$:
@@ -63,3 +83,7 @@ A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)
 $$
 
 This advantage function will be central to policy gradient methods and PPO.
+
+:::caution[Common misconception: "Reward shaping just speeds up learning."]
+Adding hand-crafted intermediate rewards (e.g. "+0.1 for moving toward the goal") seems harmless. It is not. Shaping can change the *optimal policy* — e.g., an agent rewarded for "moving toward the goal" can learn to oscillate in place to farm the shaping reward. The standard fix is **potential-based shaping** ($F(s, s') = \gamma \Phi(s') - \Phi(s)$ for some potential $\Phi$), which provably preserves the optimal policy because the added rewards telescope to zero across any cycle. Ad-hoc bonuses don't have this guarantee.
+:::

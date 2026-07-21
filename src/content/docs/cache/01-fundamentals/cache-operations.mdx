@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import CacheSim from '../../../../components/visualizations/CacheSim';
+
 ## Read Path
 
 When the CPU reads address $A$:
@@ -65,6 +67,16 @@ True LRU requires tracking the access order of all $W$ ways — for 16-way, that
 | **Conflict** | Multiple blocks compete for the same set | Higher associativity |
 
 Understanding these categories helps diagnose performance problems: if increasing cache size doesn't help, you likely have conflict misses (try higher associativity) or the working set fundamentally doesn't fit.
+
+## Interactive: Cache Simulator
+
+Configure a small cache, pick an access pattern, and watch each access classify as a hit or as a compulsory / capacity / conflict miss. The classification follows the standard "three Cs" definition: a miss is a conflict miss iff a fully-associative cache of the same total capacity would have hit on the same access.
+
+<CacheSim client:only="react" />
+
+:::caution[Common misconception: "If accesses go in cache and out, it's just a miss — the kind doesn't matter."]
+The miss type tells you *which lever to pull*. **Compulsory** misses come down only with prefetching or larger lines (spatial locality). **Capacity** misses say your working set is too big for this cache level — only a larger cache or a smaller working set helps. **Conflict** misses, however, can vanish without changing capacity at all: just adding associativity. Try the *Strided (i\*4096)* pattern: every block lands in set 0, so a 32 KB direct-mapped cache misses constantly even though it could fit the data 100× over. Switching to 8-way (same total bytes) fixes it.
+:::
 
 ## Prefetching
 

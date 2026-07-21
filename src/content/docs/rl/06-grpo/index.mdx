@@ -1,0 +1,90 @@
+---
+title: Group Relative Policy Optimization (GRPO)
+description: Critic-free policy optimization for LLM alignment
+sidebar:
+  order: 0
+---
+
+import GRPOAdvantage from '../../../../components/visualizations/GRPOAdvantage';
+import GRPOLive from '../../../../components/visualizations/GRPOLive';
+
+**GRPO** (Shao et al., 2024 — DeepSeek) simplifies PPO for language model training by **removing the critic network entirely**. Instead of learning a value function to estimate advantages, GRPO computes advantages by comparing outputs within a group sampled from the same prompt.
+
+## Motivation
+
+PPO requires a critic $V_\phi(s)$ to compute advantages. For LLMs, this critic:
+- Must be a model comparable in size to the policy (expensive!)
+- Is hard to train well for diverse prompts
+- Adds significant memory and compute overhead
+
+GRPO asks: **can we estimate advantages without a critic?**
+
+## The GRPO Idea
+
+For each prompt $x$, sample a **group** of $G$ outputs from the current policy:
+
+$$
+\{y_1, y_2, \ldots, y_G\} \sim \pi_\theta(\cdot \mid x)
+$$
+
+Score each output with a reward function $R(x, y_i)$, then normalize within the group:
+
+$$
+\hat{A}_i = \frac{R(x, y_i) - \text{mean}(\{R(x, y_j)\}_{j=1}^G)}{\text{std}(\{R(x, y_j)\}_{j=1}^G)}
+$$
+
+This **group-relative advantage** tells us how good each output is *compared to its peers*, without needing any learned baseline.
+
+## The GRPO Objective
+
+GRPO uses a clipped surrogate similar to PPO:
+
+$$
+L^{GRPO}(\theta) = \mathbb{E}_{x} \left[ \frac{1}{G} \sum_{i=1}^{G} \min \left( r_i(\theta) \hat{A}_i, \; \text{clip}(r_i(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_i \right) - \beta \, D_{KL}(\pi_\theta \| \pi_\text{ref}) \right]
+$$
+
+where:
+- $r_i(\theta) = \frac{\pi_\theta(y_i \mid x)}{\pi_{\theta_\text{old}}(y_i \mid x)}$ is the probability ratio for the full output
+- $\beta \, D_{KL}$ is a KL penalty to prevent the policy from drifting too far from a reference model
+
+## Interactive: Build a Group
+
+Edit the rewards for a group of sampled outputs and watch the advantages recompute. Try making all rewards identical (signal vanishes) or one of them much larger (it dominates).
+
+<GRPOAdvantage client:only="react" />
+
+## Live: The Full Loop
+
+Now let the loop run. A tiny "LLM" chooses among four answering strategies; a verifier returns 0 or 1. Every tick is one complete GRPO group: sample $G$ rollouts, score, normalize, update. Prompts alternate between an **easy** and a **hard** type, sharing one policy:
+
+<GRPOLive client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Each group samples G strategies from π (blue bars), gets binary rewards (dashed lines mark each strategy's true success rate on easy/hard prompts), and converts them into group-relative advantages Â — watch the right panel: within one group, the ✓ rollouts get positive Â and the ✗ rollouts negative, *regardless of the prompt's absolute difficulty*. That is the critic-free baseline doing its job.
+
+**Knobs.** G is the group size; the ÷σ toggle switches between (r−μ)/σ and plain r−μ (watch the Â magnitudes change); learning rate scales the update.
+
+**Try this.** Run at 1× and watch a hard-prompt group and an easy-prompt group back to back — comparable Â magnitudes despite wildly different mean reward. Then speed up and watch the *wasted groups* curves: as π(CoT) → 1, easy prompts increasingly come back all-correct — σ = 0, zero gradient, nothing learned — while hard prompts keep teaching. Finally drop G to 2: even mixed outcomes become rare, and most of your compute buys no signal. This is exactly why DAPO-style **dynamic sampling** filters out prompts whose groups are all-correct or all-wrong.
+</div>
+
+:::caution[Common misconception: "GRPO must have many samples to be unbiased."]
+The group-relative advantage is **not unbiased** for the true policy gradient — even a critic-free estimator like REINFORCE-with-mean-baseline is technically biased when the baseline is computed from the same samples that compute the gradient (it correlates with the score). The trick is that the bias is small relative to the variance reduction, and shrinks as $G$ grows. With $G = 1$ you get no signal at all ($r - \mu = 0$ trivially); typical GRPO setups use $G = 8$–$64$. Lowering $G$ to save compute does *not* just lose variance — it introduces a systematic underweighting of moderately-good outputs in the small-group regime.
+:::
+
+## Key Differences from PPO
+
+| Aspect | PPO | GRPO |
+|--------|-----|------|
+| Advantage estimation | Learned critic $V_\phi$ | Group normalization |
+| Extra model | Yes (critic) | No |
+| Per-token or per-output | Per-token advantages | Per-output advantages |
+| KL constraint | Clipping only | Clipping + explicit KL penalty |
+| Memory overhead | High (policy + critic) | Lower (policy only) |
+
+:::note[Why this works for LLMs]
+In language model alignment, the reward is typically given for the **complete output** (e.g., human preference rating, correctness score). We don't need per-token advantages — we just need to know which *complete outputs* are better than others. Group comparison provides exactly this signal.
+:::
+## References
+
+- Shao et al. *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models.* 2024 — where GRPO was introduced. [arXiv:2402.03300](https://arxiv.org/abs/2402.03300)
+- DeepSeek-AI. *DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning.* 2025 — GRPO at reasoning-model scale. [arXiv:2501.12948](https://arxiv.org/abs/2501.12948)

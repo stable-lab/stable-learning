@@ -51,3 +51,6 @@ $$
 This is what allows us to turn an expectation over trajectories into a practical Monte Carlo estimate — we sample trajectories and multiply the score by the return.
 
 For a categorical policy (like a language model), if $\pi_\theta(a \mid s) = \text{softmax}(f_\theta(s))_a$, then the score function is just the gradient of the log-softmax output.
+## References
+
+- Williams. *Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning.* Machine Learning 8, 1992. [Springer](https://link.springer.com/article/10.1007/BF00992696)

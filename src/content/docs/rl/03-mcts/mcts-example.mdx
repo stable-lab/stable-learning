@@ -1,0 +1,167 @@
+---
+title: A Worked MCTS Example
+description: Tic-tac-toe walked through, plus reference Python
+sidebar:
+  order: 2
+---
+
+import TicTacToeMCTS from '../../../../components/visualizations/TicTacToeMCTS';
+
+We use **tic-tac-toe** because it is small enough to reason about by hand — 9 squares, branching factor that starts at 9 and decreases — but rich enough to show the full MCTS loop.
+
+## Setup
+
+- States: 3×3 board, each cell either `X`, `O`, or empty.
+- Actions: place the current player's mark on any empty cell.
+- Reward (from perspective of the player who just moved): $+1$ win, $0$ draw, $-1$ loss. Returned only at terminal states.
+
+## A Single MCTS Iteration
+
+Suppose `X` is to move. The root node represents the current board. Initially the tree has only the root, with $N = 0$, $W = 0$ at every (yet-to-be-created) child.
+
+### Iteration 1
+
+```
+Selection:   only the root exists, nothing to select.
+Expansion:   add one child for one untried action — say, X plays center.
+Simulation:  rollout from "X center" with random play until terminal.
+             Say it ends in a draw, z = 0.
+Backprop:    N(root, center) ← 1, W(root, center) ← 0.
+```
+
+### Iteration 2
+
+```
+Selection:   at root, all 9 actions except "center" are untried (N = 0).
+             By convention they are infinitely attractive — UCB returns
+             ∞ for unvisited children — so we pick another untried action.
+Expansion:   add child for X plays corner (say, top-left).
+Simulation:  random rollout from "X top-left". Say X loses, z = −1.
+Backprop:    N(root, TL) ← 1, W(root, TL) ← −1.
+```
+
+### Iterations 3–9
+
+Each iteration expands one more untried root action. After 9 iterations, every direct child of the root has been visited exactly once.
+
+### Iteration 10
+
+Now every root child has $N = 1$, $W$ from one rollout. UCB1 with $c = \sqrt{2}$:
+
+$$
+\text{UCT}(s, a) = W(s, a) + \sqrt{2} \cdot \sqrt{\frac{\ln 9}{1}} \approx W(s, a) + 2.10
+$$
+
+The exploration term is the same for every child, so UCB picks the child with the **best $W$** — likely "center" if it produced a draw while others lost (random rollouts heavily favor center in tic-tac-toe).
+
+Descend into the center node. Now the *opponent* `O` is to move. Repeat selection on the center subtree.
+
+After thousands of iterations, the tree is deep along the principal variation (the line both players think is best) and shallow elsewhere — exactly the asymmetric search MCTS gives us.
+
+## Choosing the Root Action
+
+After the simulation budget is spent, return the most-visited root child:
+
+```
+action ← argmax_a N(root, a)
+```
+
+For tic-tac-toe with enough rollouts, the recommendation converges to **center** as the first move — which optimal play confirms.
+
+## Reference Implementation
+
+A minimal MCTS in Python. The game-specific bits (legal moves, terminal check, reward) are abstracted behind a `state` interface so the search is reusable.
+
+```python
+import math, random
+
+class Node:
+    def __init__(self, state, parent=None, action=None):
+        self.state = state          # game state
+        self.parent = parent
+        self.action = action        # action that led here from parent
+        self.children = {}          # action -> Node
+        self.N = 0                  # visit count
+        self.W = 0.0                # total value (sum of z over rollouts)
+        self.untried = state.legal_actions()
+
+    def is_fully_expanded(self):
+        return len(self.untried) == 0
+
+    def is_terminal(self):
+        return self.state.is_terminal()
+
+
+def uct_select(node, c=math.sqrt(2)):
+    log_N = math.log(node.N)
+    def score(child):
+        return child.W / child.N + c * math.sqrt(log_N / child.N)
+    return max(node.children.values(), key=score)
+
+
+def mcts(root_state, iterations=10_000):
+    root = Node(root_state)
+    for _ in range(iterations):
+        node = root
+
+        # 1. Selection
+        while not node.is_terminal() and node.is_fully_expanded():
+            node = uct_select(node)
+
+        # 2. Expansion
+        if not node.is_terminal():
+            action = node.untried.pop()
+            next_state = node.state.apply(action)
+            child = Node(next_state, parent=node, action=action)
+            node.children[action] = child
+            node = child
+
+        # 3. Simulation (random rollout)
+        rollout_state = node.state
+        while not rollout_state.is_terminal():
+            a = random.choice(rollout_state.legal_actions())
+            rollout_state = rollout_state.apply(a)
+        z = rollout_state.reward()   # from the perspective of the player to move at root
+
+        # 4. Backpropagation
+        cur = node
+        while cur is not None:
+            cur.N += 1
+            cur.W += z
+            z = -z                   # flip for the opposing player in two-player zero-sum
+            cur = cur.parent
+
+    # most-visited child
+    return max(root.children.items(), key=lambda kv: kv[1].N)[0]
+```
+
+A few things worth noticing:
+
+- **Sign flip in backprop** (`z = -z`). In a two-player zero-sum game, a `+1` for `X` is a `−1` for `O`. Flipping as we walk up keeps every node's $W/N$ in *its own player's perspective*.
+- **Unvisited children get score $\infty$.** Because we expand before scoring, every child seen by `uct_select` has $N \geq 1$ — but if you ever change that, treat $N=0$ children as $+\infty$ to force exploration of every action at least once.
+- **No domain knowledge.** This same code runs on Connect-Four or Go — only the `State` class changes.
+
+## Play Against MCTS
+
+The widget below runs the exact algorithm in the code block, with an adjustable simulation budget per move. Try to beat MCTS at 20 iterations (easy), then crank it up to 1000 (you cannot — perfect play forces a draw).
+
+<TicTacToeMCTS client:only="react" />
+
+## Tuning Knobs
+
+| Parameter | Effect |
+|-----------|--------|
+| Iterations | More → better; in production MCTS uses time-based budgets |
+| $c$ | Lower → exploit more; higher → explore more |
+| Rollout policy | Random is fine for tic-tac-toe; heuristic or neural for Go/chess |
+| Tree reuse | Between moves, keep the subtree under the chosen action instead of restarting |
+
+The last one is a big deal: in self-play, by the time it is your turn again, MCTS has already done thousands of useful simulations in the relevant subtree. Throwing them away is wasteful.
+
+## Common Pitfalls
+
+- **Forgetting to flip $z$** in backprop turns MCTS into a "both players are us" search — it picks moves that help the opponent.
+- **Reward scale wrong relative to $c$.** If you use $z \in [-1, 1]$ but rewards are actually $\pm 100$, the exploitation term dominates and the search becomes greedy.
+- **Counting illegal moves as untried.** Always populate `node.untried` with *legal* actions only, or selection will try to expand into bogus states.
+
+The next page shows how AlphaZero replaces the random rollout with a neural-net value estimate, and uses MCTS itself as a policy improvement operator.

@@ -1,0 +1,112 @@
+---
+title: UCB & UCT
+description: The selection rule that makes MCTS converge
+sidebar:
+  order: 1
+---
+
+import UCTCalculator from '../../../../components/visualizations/UCTCalculator';
+
+The selection phase of MCTS lives or dies on the **exploration–exploitation tradeoff**: spend too much time on the best-looking branch and you miss a better one; spread compute uniformly and you barely make progress on the best line. UCB1 is the simplest principled answer.
+
+## The Multi-Armed Bandit Setup
+
+Forget trees for a moment. Imagine $K$ slot machines ("arms"), each returning rewards from an unknown distribution with mean $\mu_a$. You have $T$ pulls. Goal: maximize total reward — equivalently, minimize **regret** $R_T = T \mu^* - \sum_t r_t$ relative to always pulling the best arm.
+
+A purely greedy strategy (pull the arm with the highest current sample mean) can lock onto a suboptimal arm forever. A purely uniform strategy wastes pulls on obviously bad arms. UCB1 is the elegant middle.
+
+## UCB1
+
+For each arm $a$ after $t$ total pulls, with $n_a$ pulls of that arm and sample mean $\bar{r}_a$:
+
+$$
+\text{UCB1}(a) = \bar{r}_a + c \sqrt{\frac{\ln t}{n_a}}
+$$
+
+Pull $\arg\max_a \text{UCB1}(a)$.
+
+| Term | Role |
+|------|------|
+| $\bar{r}_a$ | **Exploit** — what we currently believe |
+| $\sqrt{\ln t / n_a}$ | **Explore** — confidence radius shrinks as $n_a$ grows |
+| $c$ | Knob trading off the two |
+
+The bound comes from Hoeffding's inequality: with high probability, the true mean lies within $\bar{r}_a \pm O(\sqrt{\ln t / n_a})$. Picking the arm with the **highest upper bound** is the principle of "optimism in the face of uncertainty" — try things that *might* be better, weighted by how plausible that is.
+
+**Regret bound.** UCB1 achieves $R_T = O(\sqrt{KT \ln T})$, which matches the lower bound up to log factors — you can't do much better without distributional assumptions.
+
+## UCT: UCB Applied to Trees
+
+**UCT** (Kocsis & Szepesvári, 2006) is "UCB applied to Trees": at every internal node of the MCTS tree, treat the children as a bandit problem and use UCB1 to pick which to descend into.
+
+$$
+\text{UCT}(s, a) = \frac{W(s, a)}{N(s, a)} + c \sqrt{\frac{\ln N(s)}{N(s, a)}}
+$$
+
+The first term is the empirical mean reward through that edge; the second is the exploration bonus shrinking with visits.
+
+For a two-player zero-sum game with rewards in $[0, 1]$ (win-rate), the conventional choice is $c = \sqrt{2}$. For other reward ranges, scale $c$ to match — the exploration term must be the same order of magnitude as the empirical mean, or one term dominates and you collapse to pure exploit or pure explore.
+
+## Worked Numerical Example
+
+Imagine an MCTS node with three children. After 10 root iterations:
+
+| Child | $N$ | $W$ | $W/N$ |
+|-------|----:|----:|-------|
+| A | 6 | 4.0 | 0.667 |
+| B | 3 | 1.2 | 0.400 |
+| C | 1 | 0.8 | 0.800 |
+
+With $c = \sqrt{2}$ and $N(s) = 10$:
+
+$$
+\text{UCT}_A = 0.667 + \sqrt{2} \sqrt{\frac{\ln 10}{6}} \approx 0.667 + 0.875 = 1.542
+$$
+
+$$
+\text{UCT}_B = 0.400 + \sqrt{2} \sqrt{\frac{\ln 10}{3}} \approx 0.400 + 1.238 = 1.638
+$$
+
+$$
+\text{UCT}_C = 0.800 + \sqrt{2} \sqrt{\frac{\ln 10}{1}} \approx 0.800 + 2.146 = 2.946
+$$
+
+UCT picks **C**, even though A has the best empirical mean. Why? C has only been tried once — its confidence interval is huge, and we cannot rule out that it's the best. After C is sampled a few more times its exploration bonus shrinks, and selection naturally redistributes.
+
+This is the magic of UCB: **the most-visited node is the one we are most confident is best**, not necessarily the one with the highest mean right now.
+
+### Interactive: Tweak Your Own Scenario
+
+Edit the visit counts and reward totals to construct edge cases. Slide `c` to watch which arm wins under different exploration regimes.
+
+<UCTCalculator client:only="react" />
+
+:::caution[Common misconception: "Higher c always means better exploration."]
+The exploration term in UCT is `c · √(ln Nₚ / N)`. If your rewards are bounded in [0, 1] and you set `c = 50`, the exploration term *dwarfs* the exploitation term for any reasonable visit count — the search becomes effectively round-robin and you're just doing uniform sampling with extra steps. `c` needs to be on the same order of magnitude as your reward scale. The classic recommendation `c = √2 ≈ 1.41` assumes rewards in [0, 1]. With rewards in [-100, +100] you should scale `c` proportionally.
+:::
+
+## Practical Tweaks
+
+Real MCTS implementations rarely use plain UCT. Three common modifications:
+
+**FPU (First-Play Urgency).** A child with $N = 0$ has an undefined exploitation term. Set it to a sensible default — sometimes the parent's value, sometimes a fixed optimistic constant.
+
+**PUCT (Predictor + UCT).** Add a *prior* probability $P(s, a)$ from a learned policy network:
+
+$$
+\text{PUCT}(s, a) = \frac{W(s, a)}{N(s, a)} + c \cdot P(s, a) \cdot \frac{\sqrt{N(s)}}{1 + N(s, a)}
+$$
+
+This is what AlphaZero uses. The prior biases search toward moves the policy net thinks are good, dramatically improving sample efficiency in deep trees. Note the missing $\ln$ — the $\sqrt{N(s)}/(1 + N(s,a))$ form is the "PUCT-variant" introduced by Rosin (2011) and refined for AlphaGo.
+
+**Virtual loss.** When running MCTS in parallel across many threads, temporarily decrement $W$ along the descended path. This discourages other threads from following the exact same route and de facto parallelizes selection. Reverse the virtual loss in backprop.
+
+## Why $\sqrt{\ln N / n}$ and Not Something Else?
+
+The functional form is not magic — it comes directly from a Hoeffding bound on $K$-armed bandits with bounded rewards. Different bandit assumptions yield different bounds (e.g. KL-UCB, Thompson sampling). Empirically, plain UCT works well across many domains, and the cost of the simpler formula matters when you run hundreds of thousands of simulations per move.
+
+The next page walks through MCTS end-to-end on tic-tac-toe.
+## References
+
+- Auer, Cesa-Bianchi, Fischer. *Finite-time Analysis of the Multiarmed Bandit Problem.* Machine Learning 47, 2002 — UCB1, the bound UCT transplants into the tree. [Springer](https://link.springer.com/article/10.1023/A:1013689704352)
+- Kocsis & Szepesvári. *Bandit Based Monte-Carlo Planning.* ECML 2006. [Springer](https://link.springer.com/chapter/10.1007/11871842_29)

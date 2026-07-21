@@ -1,0 +1,131 @@
+---
+title: Baselines & Variance Reduction
+description: Reducing variance in policy gradient estimates
+sidebar:
+  order: 2
+---
+
+import BaselineVariance from '../../../../components/visualizations/BaselineVariance';
+import BaselineRace from '../../../../components/visualizations/BaselineRace';
+
+## The Variance Problem
+
+REINFORCE's gradient estimate has high variance because the return $G_t$ can vary wildly between episodes. This means we need many samples for a reliable gradient, making training slow.
+
+## Adding a Baseline
+
+We can subtract a **baseline** $b(s_t)$ from the return without introducing bias:
+
+$$
+\nabla_\theta J(\theta) = \mathbb{E}_{\tau} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot (G_t - b(s_t)) \right]
+$$
+
+Why is this still unbiased? Because:
+
+$$
+\mathbb{E}_{a \sim \pi_\theta} \left[ \nabla_\theta \log \pi_\theta(a \mid s) \cdot b(s) \right] = b(s) \cdot \nabla_\theta \sum_a \pi_\theta(a \mid s) = b(s) \cdot \nabla_\theta 1 = 0
+$$
+
+The baseline doesn't change the expected gradient — it only reduces variance.
+
+## The Value Function Baseline
+
+The best common choice for the baseline is the **state-value function** $V^\pi(s)$:
+
+$$
+b(s_t) = V^\pi(s_t)
+$$
+
+This turns the weight from $G_t$ into the **advantage**:
+
+$$
+A_t = G_t - V^\pi(s_t)
+$$
+
+The advantage is positive when the action was better than average, and negative when it was worse. This is much more informative than the raw return.
+
+:::tip[Why the value function?]
+The optimal baseline (minimizing variance) is close to the value function. Intuitively, subtracting $V(s)$ removes the "how good is this state?" component, leaving only "how good was this specific action?"
+:::
+
+## Interactive: Watch the Variance Shrink
+
+A 2-action bandit with Gaussian rewards. We draw N samples and form the REINFORCE single-sample gradient estimate with and without the value-function baseline. Both have the **same mean** (the proof above) but visibly different spread.
+
+<BaselineVariance client:only="react" />
+
+### Worked Example
+
+With $\mu_0 = 8, \mu_1 = 10, \sigma = 2$, policy $\pi(a{=}1) = 0.6$:
+
+$$
+V(s) = 0.6 \cdot 10 + 0.4 \cdot 8 = 9.4
+$$
+
+A single sample where action $a{=}1$ is taken and reward $r = 11$ is observed:
+
+| Quantity | No baseline | With baseline |
+|----------|-------------|---------------|
+| advantage | $r = 11$ | $r - V = 11 - 9.4 = 1.6$ |
+| score $\nabla_\theta \log \pi(1\|s)$ | $1 - 0.6 = 0.4$ | $1 - 0.6 = 0.4$ |
+| gradient | $0.4 \cdot 11 = 4.40$ | $0.4 \cdot 1.6 = 0.64$ |
+
+If action $a{=}0$ is taken with $r = 9$:
+
+| Quantity | No baseline | With baseline |
+|----------|-------------|---------------|
+| advantage | $r = 9$ | $r - V = -0.4$ |
+| score | $-p_1 = -0.6$ | $-0.6$ |
+| gradient | $-0.6 \cdot 9 = -5.40$ | $-0.6 \cdot -0.4 = 0.24$ |
+
+The baselined gradients are both small and same-signed (positive — both actions look slightly above average given the noisy draw); the unbaselined ones are huge and opposite-signed, even though the average return doesn't actually distinguish the actions much.
+
+:::caution[Common misconception: "Subtracting any baseline biases the gradient."]
+The expectation $\mathbb{E}[\nabla_\theta \log \pi(a\|s) \cdot b(s)] = b(s) \cdot \nabla_\theta \sum_a \pi(a\|s) = b(s) \cdot \nabla_\theta 1 = 0$ as long as $b(s)$ doesn't depend on the action $a$. So you can subtract **any** $s$-dependent quantity — moving average, learned $V_\phi$, even a constant — and the estimator stays unbiased. The catch: subtract $b(s, a)$ (action-dependent) and you *do* introduce bias. That's the rule that breaks naive "use $Q(s, a)$ as a baseline" attempts.
+:::
+
+## Interactive: The Baseline Race
+
+The sampler above shows the spread of a single gradient estimate. Here is what that spread costs over a whole training run: two REINFORCE learners racing live on the same bandit, identical in every way except the baseline.
+
+<BaselineRace client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Two identical REINFORCE learners on the same 5-armed bandit (true mean rewards 3.2–3.8, best arm marked ▲); the only difference is that B subtracts a running-average-reward baseline before each update. Every reward is positive, so the plain learner A pushes up whichever arm it happens to sample — its updates are dominated by the constant +3 reward floor rather than by which arm is actually better, and it sometimes locks onto the wrong arm for good.
+
+**Knobs.** The learning rate α is shared by both learners; σ is the reward noise around each arm's mean.
+
+**Try this.** Crank σ to 1.2 and watch the race gap widen — A whipsaws across the π = 0.8 line and takes roughly 3× longer to stay there, while B still climbs cleanly every run. Then drop σ to 0: A's red gradient trace barely falls, because its variance never came from reward noise — it is the baseline-removable offset term, the same one that blows up the no-baseline gradients in the worked example above.
+</div>
+
+## Actor-Critic
+
+When we learn both:
+- A **policy** $\pi_\theta$ (the actor)
+- A **value function** $V_\phi$ (the critic)
+
+we get an **actor-critic** method. The critic provides the baseline, and the actor updates using the advantage:
+
+$$
+\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot \hat{A}_t
+$$
+
+$$
+\phi \leftarrow \phi - \beta \nabla_\phi (V_\phi(s_t) - G_t)^2
+$$
+
+This is the foundation for PPO, which we'll cover next.
+
+## Summary
+
+| Method | Weight | Bias | Variance |
+|--------|--------|------|----------|
+| REINFORCE | $G_t$ | None | High |
+| With baseline | $G_t - b(s)$ | None | Lower |
+| Actor-Critic | $\hat{A}_t$ | Some (bootstrapping) | Lowest |
+
+The bias-variance tradeoff is a recurring theme — we'll see it again with GAE in the PPO section.
+## References
+
+- Williams. *Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning.* Machine Learning 8, 1992 — already includes the baseline. [Springer](https://link.springer.com/article/10.1007/BF00992696)
+- Greensmith, Bartlett, Baxter. *Variance Reduction Techniques for Gradient Estimates in Reinforcement Learning.* JMLR 5, 2004 — the formal analysis of which baselines minimize variance. [JMLR](https://jmlr.org/papers/v5/greensmith04a.html)

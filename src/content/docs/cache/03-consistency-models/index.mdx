@@ -5,6 +5,8 @@ sidebar:
   order: 0
 ---
 
+import LitmusRunner from '../../../../components/visualizations/LitmusRunner';
+
 ## Coherence vs. Consistency
 
 **Coherence** (MSI/MESI) guarantees that all cores see the same sequence of values for a **single address**. But what about the order of operations across **different addresses**?
@@ -50,3 +52,13 @@ From strictest to most relaxed:
 3. **Relaxed models** (ARM, RISC-V) — nearly all reorderings possible
 
 Each step down the spectrum gives hardware more freedom but requires programmers to use **memory fences** to enforce ordering where needed.
+
+## Interactive: Run a Litmus Test Under SC
+
+The widget below enumerates every SC interleaving of two short threads and lists the reachable final-register states. Try both the Store Buffering (SB) and Message Passing (MP) tests — and notice the outcomes flagged "forbidden under SC" at the bottom. Those are exactly the cases real hardware can produce that distinguish weaker models from SC.
+
+<LitmusRunner client:only="react" />
+
+:::caution[Common misconception: "Coherent ⟹ consistent."]
+Coherence and consistency are *independent* properties. Coherence is per-address: every cache sees the same sequence of values for one address. Consistency is across addresses: when does a write to `x` become visible relative to a write to `y`? A system can be perfectly coherent and still allow `r0=r1=0` in the SB litmus — because both writes are still serialized *for their own addresses*, but the interleaving across addresses can violate program order. Coherence is implemented in the cache. Consistency lives in the load/store unit, the store buffer, and the interconnect ordering.
+:::

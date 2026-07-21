@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import FenceCost from '../../../../components/visualizations/FenceCost';
+
 ## Why Fences Exist
 
 Relaxed memory models allow the hardware to reorder operations for performance. When ordering **matters** (e.g., publishing data to other threads), the programmer inserts a **fence** (or **barrier**) to prevent specific reorderings.
@@ -73,6 +75,16 @@ C++, Rust, and Java provide **memory order** annotations that the compiler maps 
 
 :::note[x86 Gets Acquire-Release for Free]
 Because TSO already forbids Load→Load, Load→Store, and Store→Store reorderings, `acquire` and `release` compile to **plain loads and stores** on x86. Only `seq_cst` needs an actual fence. This is why many concurrent programs work correctly on x86 even with bugs — TSO is forgiving. Those same bugs surface on ARM.
+:::
+
+## Interactive: What Does Each `std::memory_order` Compile To?
+
+Pick an architecture, operation, and memory order. Watch the emitted instructions and (approximate) cycle cost change.
+
+<FenceCost client:only="react" />
+
+:::caution[Common misconception: "seq_cst is always slow."]
+On x86 a `seq_cst` *load* is the **same instruction** as a `relaxed` load (just `mov`) — completely free. Only the *store* form needs a `LOCK`-prefixed instruction. So if your hot path is loads and your stores are rare, paying for `seq_cst` is almost free. On ARM the story flips: `seq_cst` loads cost a `ldar` plus an implicit fence; `seq_cst` stores cost a `stlr` followed by a `dmb ish`. The portable rule "default to `seq_cst`" is a fine default on x86 but can be 20× slower on ARM than carefully chosen `acquire`/`release` annotations.
 :::
 
 ## Common Patterns

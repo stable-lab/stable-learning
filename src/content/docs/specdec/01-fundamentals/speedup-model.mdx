@@ -1,0 +1,61 @@
+---
+title: The Speedup Arithmetic
+description: When speculation wins, by how much, and when it backfires
+sidebar:
+  order: 2
+---
+
+import SpeedupExplorer from '../../../../components/visualizations/SpeedupExplorer';
+
+Speculation is a bet: pay $\gamma$ cheap drafts plus one target pass, win however many tokens survive. This page prices the bet.
+
+## Expected Tokens per Cycle
+
+Model each draft token as surviving independently with probability $\alpha$ (the per-position acceptance rate). A cycle emits the surviving prefix plus one token from the verifier — the correction on a rejection, or the bonus token on a clean sweep. The expected yield is a truncated geometric sum:
+
+$$
+\mathbb{E}[\text{tokens/cycle}] \;=\; \sum_{k=0}^{\gamma} \alpha^k \;=\; \frac{1 - \alpha^{\gamma+1}}{1 - \alpha}
+$$
+
+| $\alpha$ | $\gamma = 2$ | $\gamma = 4$ | $\gamma = 8$ | $\gamma \to \infty$ |
+|----------|------------|------------|------------|--------------------|
+| 0.5 | 1.75 | 1.94 | 2.00 | 2.0 |
+| 0.7 | 2.19 | 2.77 | 3.20 | 3.3 |
+| 0.85 | 2.57 | 3.68 | 5.05 | 6.7 |
+| 0.95 | 2.85 | 4.52 | 7.03 | 20.0 |
+
+Two things to internalize. First, the ceiling $1/(1-\alpha)$: a mediocre drafter ($\alpha = 0.5$) can **never** beat 2 tokens per pass no matter how long it drafts. Second, diminishing returns in $\gamma$: each extra draft position must survive *all* previous positions, so its marginal value is $\alpha^k$ — the tail of a long draft is nearly worthless unless $\alpha$ is very high.
+
+## From Tokens to Wall-Clock
+
+Drafting isn't free. With draft cost $c$ per token (relative to one target pass), a cycle takes $\gamma c + 1$ time units:
+
+$$
+S(\gamma) \;=\; \frac{\mathbb{E}[\text{tokens/cycle}]}{\gamma c + 1} \;=\; \frac{1 - \alpha^{\gamma+1}}{(1-\alpha)(\gamma c + 1)}
+$$
+
+<SpeedupExplorer client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Wall-clock speedup versus draft length γ, one curve per acceptance rate α, for the draft cost c you pick. The dashed red line is break-even — below it, speculation is actively slowing you down.
+
+**Knobs.** Only c: it is the knob systems papers fight over, and dragging it re-derives each method's design point.
+
+**Try this.** At c = 0.10, note each curve's peak γ\* — that is why real systems draft 3–8 tokens, not 20. Now drag c up to 0.5 (a "small" 7B drafting for a 70B): even α = 0.85 barely pays. Drag it to 0.02 and the α = 0.95 curve soars — that pairing of *near-free drafting* with *high acceptance* is precisely the target the EAGLE line (next chapter) and DFlash (chapter 3) are engineered to hit.
+</div>
+
+## Where α Actually Comes From
+
+$\alpha$ at position $i$ is the distribution overlap $\sum_t \min(p_i, q_i)$ — and it is not one number. Some positions are nearly deterministic given context (closing a bracket, finishing "New York Ci—") and any drafter nails them; some are genuinely open (the first token of a new sentence) and even a strong drafter's overlap drops. Raising *average* α means giving the drafter more of what the target model knows at exactly the hard positions — which is the whole idea behind drafting from the target's own hidden features, where this track goes [next](../../02-eagle/).
+
+## The Fine Print: Batch Size
+
+The model above prices one request on an idle GPU — the memory-bound regime where a verify pass over $\gamma+1$ positions costs the same as over one. At batch size $B$ the verifier now touches $B(\gamma+1)$ positions per step, and the idle compute that made verification "free" gets consumed. Under heavy serving load, speculation's discarded drafts are no longer someone else's problem: they occupy batch capacity that paying requests could have used. Fixed-γ speculation can then *reduce* cluster throughput even while it still looks fine per-request — the failure mode [DSpark](../../03-parallel-drafting/dspark/) is built around.
+
+:::note[Rules of thumb]
+Production single-request settings live around α ≈ 0.8–0.95, γ ≈ 3–8, c ≈ 0.02–0.1, for end-to-end speedups of 2–6×. If someone reports 10×+, look for a parallel drafter (c → per-block instead of per-token) or a compute-rich regime (very large model, low batch).
+:::
+
+## References
+
+- Leviathan, Kalman, Matias. *Fast Inference from Transformers via Speculative Decoding.* ICML 2023. [arXiv:2211.17192](https://arxiv.org/abs/2211.17192)

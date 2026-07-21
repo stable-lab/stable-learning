@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import DirectoryMessages from '../../../../components/visualizations/DirectoryMessages';
+
 ## The Directory
 
 Each cache line in memory has an associated **directory entry** that tracks:
@@ -46,6 +48,16 @@ This is a significant overhead — real systems use compression techniques.
 4. Once all acks are received, Core $i$ gets exclusive access
 
 The critical path is the **invalidation round-trip**: the writing core must wait for all sharers to acknowledge before proceeding.
+
+## Interactive: Walk the Message Flow
+
+Step through the actual coherence messages exchanged for a read-miss-with-modified-elsewhere and a write-miss-with-N-sharers. Watch how the *latency* and *number* of messages depend on the sharer count.
+
+<DirectoryMessages client:only="react" />
+
+:::caution[Common misconception: "Read-mostly data is cheap to share."]
+A line that 32 cores hold read-only looks "free" — every reader hits in its private L1. The cost only appears the *first time someone writes to it*: the directory must send 32 invalidations and wait for 32 acks. On a 64-core NUMA box, that single store can take microseconds — orders of magnitude slower than a cached load. This is why widely-shared "configuration" globals are a performance hazard if they are ever written: even a once-per-hour update stalls thousands of waiting threads.
+:::
 
 ## Reducing Directory Overhead
 

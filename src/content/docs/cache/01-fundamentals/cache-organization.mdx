@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import CacheAddressDecoder from '../../../../components/visualizations/CacheAddressDecoder';
+
 ## Cache Lines
 
 The cache is divided into fixed-size blocks called **cache lines** (typically 64 bytes on x86). Each line stores:
@@ -65,4 +67,14 @@ $$
 - **L1**: 32–64 KB, 8-way, 64-byte lines. Optimized for latency (~1 ns).
 - **L2**: 256 KB–1 MB, 8–16-way. Balance of size and speed.
 - **L3**: 4–64 MB, 12–16-way, shared across cores. Optimized for hit rate.
+:::
+
+## Interactive: Decompose an Address
+
+Type any 32-bit address and watch the tag/index/offset partition update as you change cache geometry. Notice that doubling associativity halves the number of sets — which shifts one bit from the index into the tag.
+
+<CacheAddressDecoder client:only="react" />
+
+:::caution[Common misconception: "Higher associativity = bigger cache."]
+Associativity controls **where** a block can sit, not **how much** the cache can hold. A 32 KB 1-way cache and a 32 KB 8-way cache store the same number of bytes. The 8-way version shifts 3 bits from the index into the tag (fewer sets, more ways per set), eliminating most conflict misses — but every read now compares 8 tags in parallel, which costs energy and latency. That's why L1 caches stop at 8-way: beyond that the latency tax outweighs the conflict-miss reduction.
 :::

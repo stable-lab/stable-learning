@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import SoftmaxPolicy from '../../../../components/visualizations/SoftmaxPolicy';
+
 ## State Space
 
 A **state** $s \in S$ captures everything the agent needs to make a decision. In practice, states can be:
@@ -35,6 +37,26 @@ The **policy** $\pi_\theta(a \mid s)$ maps states to a distribution over actions
 - **Stochastic policy**: $a \sim \pi_\theta(\cdot \mid s)$
 
 In deep RL, the policy is typically a neural network. For language models, the policy **is** the model — it outputs a probability distribution over the next token given the context.
+
+### Worked Example
+
+Consider 5 candidate actions with logits $z = [0.5, 1.2, -0.3, 0.8, 0.0]$. With temperature $\tau = 1$:
+
+$$
+\pi(a_i) = \frac{\exp(z_i)}{\sum_j \exp(z_j)} \approx [0.180, 0.363, 0.081, 0.244, 0.132]
+$$
+
+With $\tau = 0.2$ (sharper): action 1 takes essentially 100% of the mass. With $\tau = 3$ (smoother): probabilities flatten toward uniform $\approx 0.20$ each. The same logits, very different policies — temperature is one of the simplest exploration knobs.
+
+### Interactive: Build a Softmax Policy
+
+Slide the logits or the temperature and watch the resulting categorical distribution. This is exactly the shape of $\pi_\theta(a \mid s)$ for an LLM at one decoding step, just over 5 actions instead of 50,000.
+
+<SoftmaxPolicy client:only="react" />
+
+:::caution[Common misconception: "A bigger network = a smarter policy."]
+The capacity of the network sets an *upper bound* on what the policy can learn, but the **state representation** is what determines whether learning is even possible. If $s_t$ doesn't contain a Markov sufficient statistic, no policy network — however deep — can learn the optimal action. A toy example: try training a feed-forward net on Atari from a *single* frame. It will fail not because the net is too small but because velocity is not present in one frame. Adding 4 stacked frames (the original DQN trick) makes the same net suddenly work. State design *is* RL design.
+:::
 
 ## The Agent-Environment Loop
 

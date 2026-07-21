@@ -5,6 +5,8 @@ sidebar:
   order: 0
 ---
 
+import CoherenceViolation from '../../../../components/visualizations/CoherenceViolation';
+
 ## The Problem
 
 Consider two cores, each with a private L1 cache, sharing main memory:
@@ -14,6 +16,12 @@ Consider two cores, each with a private L1 cache, sharing main memory:
 3. Core 0 writes $A = 7$ → **Core 0's cache is updated, but Core 1 still sees the old value**
 
 This is a **coherence violation**: two caches disagree on the value at the same address. Without a protocol to manage this, multicore systems would produce incorrect results.
+
+## Interactive: Step Through the Violation (and the Fix)
+
+Click through the canonical scenario. Switch between "no protocol" (you'll watch the caches diverge) and "MSI protocol" (Core 1's stale copy is invalidated before it can be observed).
+
+<CoherenceViolation client:only="react" />
 
 ## What Coherence Guarantees
 
@@ -41,6 +49,10 @@ These are often confused but are distinct concepts:
 - **Consistency**: guarantees about **multiple addresses** — the order in which writes to different addresses become visible
 
 Coherence is the mechanism (MSI, MESI). Consistency is the contract (Sequential Consistency, TSO). We cover consistency models in Section 3.
+
+:::caution[Common misconception: "Coherence is a software responsibility."]
+Coherence is enforced **entirely by hardware** — neither the application code nor the OS issues any coherence messages explicitly. What software *does* control is the *consistency model* (via memory fences and atomics). The two are easily confused because both involve "memory ordering": coherence guarantees there's a single value per address; consistency guarantees an ordering of operations across addresses. Buggy multithreaded code is almost always a *consistency* bug, not a coherence bug — the hardware never gives you stale data, but it can reorder when a write becomes visible relative to other addresses.
+:::
 
 ## What's Next
 

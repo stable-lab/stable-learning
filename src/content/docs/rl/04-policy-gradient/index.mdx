@@ -5,6 +5,10 @@ sidebar:
   order: 0
 ---
 
+import PolicyGradientStep from '../../../../components/visualizations/PolicyGradientStep';
+
+The live demo at the top of [chapter 1](../01-action-chain-rewards/) — the agent that taught itself a route from raw reward — was running the algorithm this page derives. Nothing about it was hand-tuned to gridworlds: the same fifteen lines of math train language models today. The derivation has exactly one non-obvious step, and it's a one-line identity.
+
 Instead of learning a value function and deriving a policy from it (as in Q-learning), **policy gradient methods** directly optimize the policy parameters $\theta$ to maximize expected return.
 
 ## The Objective
@@ -103,6 +107,16 @@ The log-derivative trick is not specific to RL — it's a general technique call
 
 The pattern is always the same: to differentiate an expectation over a distribution you control, use $\nabla_\theta \mathbb{E}_{x \sim p_\theta}[f(x)] = \mathbb{E}_{x \sim p_\theta}[\nabla_\theta \log p_\theta(x) \cdot f(x)]$.
 
+## Interactive: A Single REINFORCE Step
+
+Two-action policy parameterized by one logit $\theta$ so $\pi(a{=}1) = \sigma(\theta)$. Set $\theta$, sample an action, supply a return $R$, and watch how the gradient pushes $\pi_\theta$.
+
+<PolicyGradientStep client:only="react" />
+
+### Worked Example
+
+$\theta_\text{old} = 0.0 \Rightarrow \pi(0) = \pi(1) = 0.5$. Sample $a = 1, R = +2$. Score function $\nabla_\theta \log \pi(1\mid s) = 1 - \pi(1) = 0.5$. Gradient $= 0.5 \cdot 2 = 1.0$. With $\alpha = 0.5$, $\theta_\text{new} = 0.5 \Rightarrow \pi_\text{new}(1) = \sigma(0.5) \approx 0.622$. The policy moved 12 percentage points toward the rewarded action from a single sample. Replay with $R = -2$ and it moves the same amount *away*.
+
 ## Why Policy Gradients?
 
 | Advantage | Explanation |
@@ -113,3 +127,11 @@ The pattern is always the same: to differentiate an expectation over a distribut
 | Model-free | Environment dynamics cancel out in the gradient |
 
 The main downside is **high variance** in the gradient estimate, which we'll address with baselines in the next pages.
+
+:::caution[Common misconception: "Policy gradient is just supervised learning with the return as label."]
+The score function $\nabla \log \pi(a \mid s)$ is *not* a loss like cross-entropy. In supervised learning you have a *target* distribution; here you have a *scalar weight* $R$ applied to the log-probability of the *action you actually sampled*. That has two surprising consequences: (1) unsampled actions get no gradient at all (one-hot in the action), and (2) a baseline doesn't change the expectation but dramatically changes the gradient on each individual sample. That's why "just train on (state, action) pairs weighted by return" works but is extremely noisy — and why the rest of this section is about variance reduction.
+:::
+## References
+
+- Williams. *Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning.* Machine Learning 8, 1992 — REINFORCE and the score-function estimator. [Springer](https://link.springer.com/article/10.1007/BF00992696)
+- Sutton, McAllester, Singh, Mansour. *Policy Gradient Methods for Reinforcement Learning with Function Approximation.* NeurIPS 1999 — the policy gradient theorem.

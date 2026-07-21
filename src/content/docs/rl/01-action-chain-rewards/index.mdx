@@ -6,8 +6,21 @@ sidebar:
 ---
 
 import ActionChainDemo from '../../../../components/visualizations/ActionChainDemo';
+import PolicyLearnerLive from '../../../../components/visualizations/PolicyLearnerLive';
 
-Reinforcement learning is built on the idea of an **agent** interacting with an **environment** over time. At each step, the agent observes a state, takes an action, and receives a reward. This loop — the action chain — is the core abstraction.
+Nobody tells this agent where the goal is. It starts with a policy that is pure noise — every direction equally likely — and the only feedback it ever gets is a number after each step. Press **Run** and watch it teach itself:
+
+<PolicyLearnerLive client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A tabular REINFORCE learner (chapter 4) with a value baseline (chapter 5's critic, in miniature) on a 4×4 gridworld: step −1, trap −5, goal +10. Blue arrows are the policy π(a|s); the cell tint is the learned value V(s); the green curve is the return per episode climbing toward the dashed optimal line.
+
+**Knobs.** Speed trades watchability for wall-clock learning; the learning rate α controls how hard each episode's outcome yanks the policy.
+
+**Try this.** Let it converge at the default α ≈ 0.1 (about 10 seconds at 5×; 28 of 30 calibration runs reach the optimal route), then reset and retry with α pushed to 2 or beyond. Now most runs lock onto a *bad* route: the entropy readout falls to 0 bits, the arrows freeze, and the curve flatlines below the optimal line — oversized updates destroy a policy irreversibly. Every later chapter exists to explain, and then prevent, what you just watched.
+</div>
+
+Reinforcement learning is built on the idea of an **agent** interacting with an **environment** over time. At each step, the agent observes a state, takes an action, and receives a reward. This loop — the action chain — is the core abstraction. The rest of this page builds the vocabulary to describe precisely what the demo above is doing.
 
 ## The Markov Decision Process (MDP)
 
@@ -67,7 +80,7 @@ This is why policy gradient methods work without knowing the environment dynamic
 
 ## Interactive Demo: Build a Trajectory
 
-Navigate the agent to the goal. Watch how the trajectory $\tau$ and discounted return $G_0$ are constructed step by step:
+This is the **same world** the learner at the top of the page is solving — but now *you* are the policy. Navigate the agent to the goal, and watch the trajectory $\tau$ and the discounted return $G_0$ get constructed step by step — the exact quantities the learner uses to update itself after every episode:
 
 <ActionChainDemo client:visible />
 
@@ -75,8 +88,16 @@ Navigate the agent to the goal. Watch how the trajectory $\tau$ and discounted r
 The step cost is $-1$, the trap gives $-5$, and the goal gives $+10$. A shorter path gives a higher return — can you find the optimal trajectory?
 :::
 
+:::caution[Common misconception: "The Markov property requires forgetting the past."]
+The Markov property does **not** mean the agent must lose its history — it means the *state representation* must summarize everything from the past that matters for predicting the future. In an Atari game, a single screen frame is *not* Markov (you can't tell if the ball is moving up or down). The fix isn't to "remember the past"; the fix is to redefine the state as a stack of 4 recent frames, which *is* Markov. This is the difference between **MDP** (state itself is Markov) and **POMDP** (you must build belief state, e.g. via an RNN). Identifying what to put into $s_t$ is half of solving an RL problem.
+:::
+
 ## What's Next
 
 In the following pages, we'll look at:
 - **States and Actions** — how to think about the state and action spaces
 - **Rewards and Return** — how rewards accumulate over time, and why discounting matters
+## References
+
+- Sutton & Barto. *Reinforcement Learning: An Introduction* (2nd ed., 2018), ch. 3 — the canonical treatment of MDPs, returns, and the agent–environment loop. [Free official PDF](http://incompleteideas.net/book/the-book-2nd.html)
+- Bellman. *Dynamic Programming.* Princeton University Press, 1957 — where the recursive structure of sequential decision problems began.

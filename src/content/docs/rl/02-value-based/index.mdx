@@ -1,0 +1,104 @@
+---
+title: Value-Based Methods
+description: Learning value functions and the Bellman equation
+sidebar:
+  order: 0
+---
+
+import BellmanBackup from '../../../../components/visualizations/BellmanBackup';
+
+Before policy-gradient methods, the classical approach to RL was to learn a **value function** and derive the policy from it. The idea: if you know how good every state (or every state–action pair) is, you can act greedily with respect to those values.
+
+## Two Value Functions
+
+From the [rewards and return page](../01-action-chain-rewards/rewards-and-return/), recall:
+
+$$
+V^\pi(s) = \mathbb{E}_\pi \left[ G_t \mid s_t = s \right], \quad
+Q^\pi(s, a) = \mathbb{E}_\pi \left[ G_t \mid s_t = s, a_t = a \right]
+$$
+
+$V^\pi$ measures **state quality**; $Q^\pi$ measures **state–action quality**. The advantage is the difference:
+
+$$
+A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)
+$$
+
+If we have $Q^*(s, a)$ — the optimal Q-function — the optimal policy is simply:
+
+$$
+\pi^*(s) = \arg\max_{a} Q^*(s, a)
+$$
+
+This is the appeal of value-based methods: **no separate policy network is required**. The policy falls out of the Q-function.
+
+## The Bellman Equation
+
+The Q-function obeys a recursive identity. Splitting the return $G_t = r_t + \gamma G_{t+1}$:
+
+$$
+Q^\pi(s, a) = \mathbb{E}\big[ r_t + \gamma \, Q^\pi(s_{t+1}, a_{t+1}) \,\big|\, s_t = s, a_t = a \big]
+$$
+
+For the **optimal** Q-function (acting greedily forever), the next action is the argmax:
+
+$$
+\boxed{\, Q^*(s, a) = \mathbb{E}_{s'} \left[ r + \gamma \max_{a'} Q^*(s', a') \right] \,}
+$$
+
+This is the **Bellman optimality equation**. It is the cornerstone of value-based RL — every method in this section is, at heart, a way of solving (or approximating) it.
+
+| Equation | Name | Used by |
+|----------|------|---------|
+| $V^\pi(s) = \mathbb{E}[r + \gamma V^\pi(s')]$ | Bellman expectation (V) | Policy evaluation |
+| $Q^\pi(s, a) = \mathbb{E}[r + \gamma Q^\pi(s', a')]$ | Bellman expectation (Q) | SARSA |
+| $Q^*(s, a) = \mathbb{E}[r + \gamma \max_{a'} Q^*(s', a')]$ | Bellman optimality | Q-learning, DQN |
+
+## Interactive: Watch Value Iteration Propagate
+
+Five-state chain MDP. Only the rightmost state gives reward `+1`. Each backup of the Bellman equation updates $V$ one step. Drag the iteration slider and watch the reward signal flow leftward — *exactly one cell per pass* — and notice how lowering $\gamma$ shortens its reach.
+
+<BellmanBackup client:only="react" />
+
+:::caution[Common misconception: "γ is just a hyperparameter."]
+The discount $\gamma$ does not merely speed up convergence — it sets *how far backward in time* a reward can influence behavior. With $\gamma = 0.5$ after 10 backups the signal is $0.5^{10} \approx 10^{-3}$, effectively zero past 10 steps. With $\gamma = 0.99$, the same horizon barely decays. A common failure in sparse-reward RL is using too small a $\gamma$: the agent provably *cannot* learn the task because the gradient toward the goal is below numerical noise everywhere except adjacent to it.
+:::
+
+## Two Ways to Estimate Q
+
+If we knew the transition probabilities $P(s' \mid s, a)$, we could solve the Bellman equation directly (dynamic programming). But we usually don't. Two sample-based methods bridge that gap:
+
+**Monte Carlo (MC).** Run a full episode, then for each visited $(s, a)$ set the target to the actual observed return $G_t$. Unbiased, but high variance and requires episode termination.
+
+**Temporal Difference (TD).** Use the Bellman equation to **bootstrap** — update toward $r + \gamma Q(s', a')$ using the current estimate of $Q$. Biased (the bootstrap target is also an estimate), but lower variance and works online, before the episode ends.
+
+The TD update for Q is:
+
+$$
+Q(s, a) \leftarrow Q(s, a) + \alpha \big[ \underbrace{r + \gamma \max_{a'} Q(s', a')}_{\text{TD target}} - Q(s, a) \big]
+$$
+
+The quantity in brackets is the **TD error** $\delta$ — the difference between what we believed $Q(s,a)$ was and what one step of bootstrap evidence suggests.
+
+:::note[The bias–variance tradeoff again]
+MC has zero bias but waits until the episode ends; TD updates immediately but inherits whatever error is in the current estimate. We will see the same axis again with [GAE](../05-ppo/gae/) — it interpolates between MC ($\lambda = 1$) and one-step TD ($\lambda = 0$).
+:::
+
+## SARSA vs Q-Learning
+
+Both are TD methods, differing only in what they put in the target:
+
+| Method | Target | Type |
+|--------|--------|------|
+| SARSA | $r + \gamma\, Q(s', a')$, $a' \sim \pi$ | **On-policy** — learns the value of the policy actually being followed |
+| Q-learning | $r + \gamma \max_{a'} Q(s', a')$ | **Off-policy** — learns the value of the *greedy* policy regardless of what action was taken |
+
+The off-policy nature of Q-learning is what makes it work with **replay buffers** in DQN — old experience from a different policy is still useful.
+
+## What's Next
+
+The next pages cover [tabular Q-learning](./q-learning/) with a worked gridworld example, and [DQN](./dqn/) — extending Q-learning to high-dimensional state spaces with neural networks.
+## References
+
+- Sutton & Barto. *Reinforcement Learning: An Introduction* (2nd ed., 2018), ch. 6 — TD learning, Sarsa, Q-learning. [Free official PDF](http://incompleteideas.net/book/the-book-2nd.html)
+- Watkins & Dayan. *Q-learning.* Machine Learning 8, 1992 — the convergence proof. [Springer](https://link.springer.com/article/10.1007/BF00992698)

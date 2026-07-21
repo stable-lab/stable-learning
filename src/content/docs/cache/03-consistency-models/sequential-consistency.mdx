@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import LitmusRunner from '../../../../components/visualizations/LitmusRunner';
+
 ## Lamport's Definition (1979)
 
 > A multiprocessor system is **sequentially consistent** if the result of any execution is the same as if the operations of all processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program.
@@ -32,6 +34,12 @@ Can r0 = 0 AND r1 = 0?
 
 Under **SC**: **No.** At least one core's store must appear first in the total order. If `x = 1` comes first, then Core 1's `r1 = x` must see 1. If `y = 1` comes first, then Core 0's `r0 = y` must see 1.
 
+### Interactive: Enumerate Every SC Interleaving
+
+This widget enumerates all 6 interleavings of the SB test and shows which final-register states are reachable under SC. The `r0=r1=0` outcome appears in **zero** of them — formally forbidden — yet x86 hardware *does* produce it. That gap is what motivated formalizing TSO.
+
+<LitmusRunner client:only="react" />
+
 ## Why SC Is Expensive
 
 To implement SC, the hardware must:
@@ -44,6 +52,10 @@ This means **no store buffers** (or they must be drained before each load). Mode
 
 :::note[No mainstream CPU implements SC]
 Even though SC is the easiest model to reason about, no modern commercial processor provides SC as its default memory model. The performance cost is too high. Instead, they provide TSO (x86) or relaxed models (ARM) and let software add fences where needed.
+:::
+
+:::caution[Common misconception: "SC means everything happens in program order."]
+SC does *not* require operations to execute in any particular real-time order across threads — it only requires that *some* total order exists in which each thread's operations appear in program order. The hardware is free to interleave threads any way it wants as long as the result matches *some* interleaving. The catch is that "some interleaving" is a much stricter constraint than relaxed models give you: the store-buffering outcome `r0=r1=0` corresponds to *no* interleaving and is therefore SC-forbidden, even though it's reachable in real silicon.
 :::
 
 ## SC for Data-Race-Free Programs (SC-DRF)

@@ -1,0 +1,52 @@
+---
+title: "EAGLE-2: Dynamic Draft Trees"
+description: Spend the node budget where the acceptance mass actually is
+sidebar:
+  order: 1
+---
+
+import TreeDraftLive from '../../../../components/visualizations/TreeDraftLive';
+
+[Tree verification](../../01-fundamentals/tree-verification/) made the *how* cheap: one pass verifies any tree. What it did not answer is *which* tree. A draft tree has a budget — every node is one more position the target must verify — so the real question is allocation: **which N nodes capture the most acceptance mass?** EAGLE-1 answers with a fixed shape — the same branching pattern for a legal contract and a limerick. EAGLE-2 starts from an observation about the draft head itself.
+
+## Confidence ≈ Acceptance
+
+The EAGLE head's output probabilities turn out to be **well-calibrated predictors of acceptance**: when the head assigns a candidate token confidence 0.8, that token survives verification roughly 80% of the time. This is not obvious — the head was never trained to predict acceptance — but it tracks, because acceptance is distribution overlap with the target, and the head was trained to imitate exactly that distribution. Which means the drafter can *price its own guesses without calling the target model*.
+
+## Value of a Node = Its Path Product
+
+A tree node only matters if **every ancestor is accepted first**. So the value of adding node $v$ approximates:
+
+$$
+\text{Value}(v) \;=\; \prod_{u \,\in\, \text{path}(root \to v)} c_u
+\qquad\Rightarrow\qquad
+\mathbb{E}[\#\text{accepted}] \;\approx\; \sum_{v \in \text{tree}} \text{Value}(v)
+$$
+
+where $c_u$ is the head's confidence in node $u$. This turns tree construction into a clean optimization: choose the $N$ nodes with the largest path products. EAGLE-2 does it in two phases per cycle — **expand** (grow the frontier greedily from the currently most-valuable nodes) then **rerank** (keep the global top-$N$ by value; a node's ancestors always outscore it, so the kept set is automatically a connected tree). The chosen tree is then verified in a single tree-attention pass, exactly as in EAGLE-1.
+
+The consequence: on a *predictable* stretch (the head is confident, one branch dominates) the tree stretches into a deep chain and harvests 6–8 tokens per pass; on an *open* stretch (confidence is flat) it goes wide and shallow, hedging across alternatives. The shape is decided per context, every cycle.
+
+## Watch the Budget Being Spent
+
+<TreeDraftLive client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Two drafters spend the same node budget on the same randomly-drawn confidence landscape. Gray: an EAGLE-1-style fixed shape. Blue: EAGLE-2's greedy expansion by path product. Each node shows its path product — its probability of actually being reached and accepted — and the readouts total these into the expected number of accepted tokens per verify pass.
+
+**Knobs.** The budget is the verification cost you're willing to pay; *context sharpness* controls how peaked the head's confidences are — sharp ≈ predictable text, flat ≈ open-ended text.
+
+**Try this.** Step through a sharp landscape (sharpness ≈ 2.5) node by node: the dynamic tree quickly commits to one deep chain while the static shape squanders half its budget on siblings whose path products are already negligible — watch the gain readout climb. Then flatten sharpness to ≈ 0.8: the two trees converge in both shape and value. Dynamic trees win exactly as much as contexts differ from the average context the static shape was designed for.
+</div>
+
+## What It Buys
+
+Same head, same training, same verification — only the tree policy changes — and EAGLE-2 adds roughly **20–40%** on top of EAGLE-1 (reported 3.05–4.26× overall, average acceptance ~4–5.5 tokens per pass, peaking above 6 on code). It also removed the last per-model tuning knob: the tree no longer needs to be hand-shaped for each deployment.
+
+:::caution[Common misconception: "The tree should maximize the chance that *some* path is fully accepted."]
+The objective is the **expected number of accepted tokens**, not the probability of a clean sweep. A deep chain with path products 0.9 → 0.72 → 0.55 → 0.40 contributes 2.57 expected tokens even though a full sweep is a coin flip. Optimizing sweep probability would build wide, shallow, timid trees — measurably worse. This distinction is also why the greedy-by-path-product policy is near-optimal: the objective is additive over nodes.
+:::
+
+## References
+
+- Li, Wei, Zhang, Zhang. *EAGLE-2: Faster Inference of Language Models with Dynamic Draft Trees.* EMNLP 2024. [arXiv:2406.16858](https://arxiv.org/abs/2406.16858)

@@ -5,6 +5,8 @@ sidebar:
   order: 0
 ---
 
+import MemoryLatency from '../../../../components/visualizations/MemoryLatency';
+
 Modern processors are dramatically faster than main memory. Without caches, the CPU would spend most of its time waiting for data. The **memory hierarchy** bridges this speed gap with progressively smaller, faster storage levels.
 
 ## The Memory Wall
@@ -30,6 +32,16 @@ When the CPU reads address $A$:
 2. **Miss**: $A$ is not in the cache → fetch from next level, store in cache, then return
 
 The cache is organized into **cache lines** (typically 64 bytes). Even if you only need 4 bytes, the entire 64-byte line is fetched — this is how spatial locality is exploited.
+
+## Interactive: AMAT and Hit-Rate Sensitivity
+
+Slide the per-level hit rates and watch the **average memory access time** (AMAT) respond. Drop L1 from 99% to 95% — sounds harmless, but AMAT often doubles. This is why a "1% miss rate" headline can completely change whether your code is L1-bound or memory-bound.
+
+<MemoryLatency client:only="react" />
+
+:::caution[Common misconception: "L1 hit rate is the only thing that matters."]
+Because L1 misses cascade, the L2 and L3 hit rates are multipliers on the *L1-miss traffic*, not on total accesses. A 99% L1 / 60% L2 / 10% L3 configuration has only ~0.4% of accesses going to DRAM, but DRAM's 100 ns can still dominate AMAT — every individual DRAM access is 100× slower than L1. The takeaway: optimize *up the hierarchy*. Improving an already-high L1 hit rate from 99.0 → 99.5% may matter more than doubling DRAM bandwidth.
+:::
 
 ## Why This Matters for Multicore
 

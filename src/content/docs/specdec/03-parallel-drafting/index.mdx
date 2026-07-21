@@ -1,0 +1,64 @@
+---
+title: "DFlash: Diffusion Drafts the Block"
+description: Kill the sequential drafting loop — propose the whole block in one pass
+sidebar:
+  order: 0
+---
+
+import BlockDiffusionViz from '../../../../components/visualizations/BlockDiffusionViz';
+
+The EAGLE line spent three papers raising α. Look at where that leaves the speedup formula, though: with acceptance lengths of 4–5 already achieved, the remaining cost is the **drafting loop itself**. An EAGLE head still runs *sequentially* — γ tokens means γ forward passes of the head, plus tree bookkeeping, all on the latency-critical path. In the [chapter 1 arithmetic](../01-fundamentals/speedup-model/): α is nearly maxed; the frontier is $c$.
+
+DFlash's answer: draft the **entire block in a single forward pass** — with a small *diffusion* language model.
+
+## Why a Diffusion Drafter
+
+Diffusion LLMs generate by iteratively refining a block of masked tokens **in parallel** — all positions at once — rather than left to right. As standalone generators they still trail autoregressive models in quality, which kept them out of production. DFlash's reframe: in a speculative pipeline, *draft quality only sets the acceptance rate*. The lossless acceptance rule from [chapter 1](../01-fundamentals/rejection-sampling/) means a diffusion model's weaknesses cost speed, never correctness — while its parallelism attacks exactly the term ($c$) that the autoregressive drafters cannot. It is the rare case where a technology's flaw is priced at zero and its strength at full value.
+
+So each cycle becomes: one parallel draft pass proposes the block → one target pass verifies it. Two big matmuls, no token-by-token loop on either side.
+
+## KV Injection: EAGLE's Trick, Upgraded
+
+A drafter that never reads the context can't guess well, and re-encoding the context with the draft model would burn the savings. DFlash conditions the drafter through **KV injection**: the *target model's* hidden representations of the context are passed through the draft model's KV projections and written **directly into the draft model's KV cache, at every draft layer**. The drafter never builds its own understanding of the prompt — it drafts inside the target's.
+
+This is the same load-bearing idea as EAGLE's feature conditioning, taken further: not one feature vector per step, but the target's full processed context, available to every drafted position in parallel.
+
+## Watch the Block Get Drafted
+
+<BlockDiffusionViz client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A controlled drafting race. Every cycle, both drafters must produce the same K-token block and both blocks face the **same acceptance coins** — so the accepted tokens are identical by construction, and the only variable left is drafting time. The amber lane types its draft one head-pass per token; the blue lane starts from a fully masked block (▒▒▒, pulsing) and commits positions over S refinement passes in *confidence order* — watch the middle of the block resolve before its left edge, something a left-to-right drafter cannot do.
+
+**Knobs.** K is the block size, S the number of refinement passes (real block-diffusion drafters use 1–2), α the shared draft quality. A target verify pass is fixed at 12 tick-equivalents.
+
+**Try this.** At the defaults (K = 8, S = 2), the *gap* chip reads (K+12)/(S+12) ≈ 1.43× — DFlash's entire edge, earned while accepting the *same* tokens. Now push K to 16: the amber lane's drafting phase becomes an ever-longer crawl while the blue lane barely notices (S didn't change) and the gap grows to 2×. This is the measured table below in miniature: identical acceptance lengths, very different clocks. The one thing this toy hides is that a longer parallel block accepts *less per position* — suffix decay — which is the next page's problem.
+</div>
+
+## What It Buys
+
+The revealing comparison is acceptance length versus speedup (SGLang measurements, EAGLE-3 with a 5-layer head as baseline):
+
+| Task | EAGLE-3 acc-len / speedup | DFlash acc-len / speedup |
+|------|--------------------------|--------------------------|
+| GSM8K | 4.2 / 2.1× | 4.2 / **3.3×** |
+| HumanEval | 4.3 / 2.2× | 4.0 / **3.2×** |
+| MT-Bench | 3.1 / 1.4× | 3.0 / **2.2×** |
+
+Read that table twice: DFlash accepts **the same number of tokens** per pass — and is ~1.5× faster anyway. The entire gain is the drafting cost collapsing from γ sequential steps to one parallel pass. Overall the paper reports **>6× lossless acceleration** across models (up to 2.5× over EAGLE-3), >4.3× throughput on a 397B MoE, and NVIDIA reports up to 15× for gpt-oss-120b on Blackwell at matched interactivity — parallel drafting composes multiplicatively with hardware that has compute to spare.
+
+:::note[The systems side: Spec V2]
+Half of production speculative-decoding time can disappear into host–device synchronization rather than math. SGLang's second-generation speculation engine ("Spec V2") overlaps host-side bookkeeping and KV allocation with GPU execution, worth another ~33% on top of the algorithm. Algorithmic and systems gains stack — a theme this site's [cache track](../../cache/01-fundamentals/) readers will find familiar.
+:::
+
+:::caution[Common misconception: "A diffusion drafter makes the output slightly 'diffusion-flavored'."]
+Nothing the drafter proposes survives without clearing the target's acceptance rule, position by position. The output distribution is the target's, exactly — same theorem as chapter 1, no exceptions for exotic drafters. If the diffusion block is bad, you'll see it in the *drafts wasted* metric, not in the text.
+:::
+
+Block drafting does introduce a new failure mode of its own: the later positions of a parallel block are guessed with the least information, so acceptance *decays along the block* — and under batch load, verifying doomed suffixes wastes real capacity. Pricing and pruning that waste is [DSpark's job](dspark/).
+
+## References
+
+- *DFlash: Block Diffusion for Flash Speculative Decoding.* ICML 2026. [arXiv:2602.06036](https://arxiv.org/abs/2602.06036) · [code](https://github.com/z-lab/dflash)
+- LMSYS. *The Next Generation of Speculative Decoding: DFlash and Spec V2.* [lmsys.org](https://www.lmsys.org/blog/2026-06-15-next-generation-speculative-decoding-dflash-v2/)
+- NVIDIA. *Boost Inference Performance up to 15× on Blackwell Using DFlash.* [developer.nvidia.com](https://developer.nvidia.com/blog/boost-inference-performance-up-to-15x-on-nvidia-blackwell-using-dflash-speculative-decoding/)

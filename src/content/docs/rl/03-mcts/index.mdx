@@ -1,0 +1,128 @@
+---
+title: Monte Carlo Tree Search
+description: Planning with search trees instead of (or alongside) learned value functions
+sidebar:
+  order: 0
+---
+
+import MCTSDemo from '../../../../components/visualizations/MCTSDemo';
+
+[Q-learning](../02-value-based/q-learning/) gives the agent a *cached* judgement about every state — it learns once, then acts greedily. **Monte Carlo Tree Search (MCTS)** does the opposite: at every decision, it spends compute *now* to plan forward by simulation, expanding a search tree rooted at the current state.
+
+Both can be combined. AlphaGo / AlphaZero use a neural-net value head as the *guide* for MCTS, then train that net on the policies MCTS discovers. This page introduces MCTS on its own; the next pages cover the [UCT selection rule](./uct/) and a [worked tic-tac-toe example](./mcts-example/), and we close with the [AlphaZero loop](./alphazero/).
+
+## The Setting
+
+MCTS shines when:
+
+- A **simulator** lets you roll forward from any state. Board games, planning problems, and toy environments all qualify.
+- The branching factor is large enough that exhaustive search is impossible, but the tree is *deep enough that lookahead helps*. Chess (≈35 branching), Go (≈250), code-search (varies).
+- Rewards are largely **terminal** — win/lose at the end — so intermediate states are hard to evaluate without simulating forward.
+
+## The Four-Phase Loop
+
+A single MCTS **iteration** has four phases. Repeat them thousands of times before committing to an action.
+
+```
+                 ┌──────────────┐
+                 │  Selection   │  walk down the tree
+                 │  via UCB     │  to a leaf
+                 └──────┬───────┘
+                        │
+                 ┌──────▼───────┐
+                 │  Expansion   │  add 1 child node
+                 └──────┬───────┘
+                        │
+                 ┌──────▼───────┐
+                 │  Simulation  │  rollout to terminal
+                 │  (rollout)   │  (random or guided)
+                 └──────┬───────┘
+                        │
+                 ┌──────▼───────┐
+                 │ Backpropagate│  update statistics
+                 └──────────────┘  along the path
+```
+
+### 1. Selection
+
+Starting at the root, traverse the existing tree by repeatedly choosing the child that maximizes a selection rule. The classic choice is **UCB1** (a.k.a. UCT when used in trees):
+
+$$
+\text{UCB1}(s, a) = \underbrace{\frac{W(s, a)}{N(s, a)}}_{\text{exploitation}} + c \underbrace{\sqrt{\frac{\ln N(s)}{N(s, a)}}}_{\text{exploration}}
+$$
+
+- $W(s, a)$ = total reward (or wins) backed up through $(s, a)$
+- $N(s, a)$ = visit count of $(s, a)$
+- $N(s) = \sum_a N(s, a)$
+- $c$ = exploration constant (often $c = \sqrt{2}$ for win-rate–scaled rewards)
+
+The first term prefers actions that have looked good; the second pulls compute toward under-sampled branches. Details and intuition in the [UCT page](./uct/).
+
+### 2. Expansion
+
+When selection reaches a node with un-tried actions (a "leaf" of the in-memory tree), add one new child for one such action. Just one — MCTS expands the tree gradually, one node per iteration.
+
+### 3. Simulation (Rollout)
+
+From the newly expanded node, play out to a terminal state using a **rollout policy**:
+
+- **Random rollout** — sample uniformly at random. Cheap. Surprisingly competitive in many domains.
+- **Heuristic rollout** — use a fast hand-coded policy (e.g., capture-when-possible in chess).
+- **Neural-net rollout** — query a learned policy (AlphaZero replaces rollouts with a value-net evaluation entirely).
+
+The rollout returns a terminal reward $z$ (e.g., $+1$ win, $0$ draw, $-1$ loss for a two-player game).
+
+### 4. Backpropagation
+
+Walk back up from the new leaf to the root, updating statistics at every edge traversed during selection:
+
+$$
+N(s, a) \mathrel{+}= 1, \qquad W(s, a) \mathrel{+}= z
+$$
+
+In two-player zero-sum games, flip $z$ for the opponent's nodes so each side's $W/N$ reflects its own perspective.
+
+## Interactive: Watch the Tree Grow
+
+The widget below runs MCTS on a depth-3 number-pick toy game (reward = normalized sum of chosen actions, optimal action is always 2). Hit **Step phase** to walk a single iteration through *Selection → Expansion → Simulation → Backprop*, or use **+200 iters** to fast-forward. The blue path is the current iteration's descent; orange marks the newly-expanded leaf that the rollout starts from.
+
+<MCTSDemo client:only="react" />
+
+:::caution[Common misconception: "MCTS finds the best move, then commits to it."]
+Set the exploration constant `c = 0` and run a few hundred iterations. The search collapses onto whichever root child got an early lucky rollout — even if that's the worst action. Pure exploitation is *not* greedy with respect to the truth; it is greedy with respect to the noisy estimates so far. UCB's job isn't decoration: without it MCTS is provably no better than random sampling. Conversely, very large `c` (say > 2.5) flattens the search into nearly uniform exploration and visit counts at the root no longer concentrate on any move.
+:::
+
+## After Many Iterations
+
+When the compute budget is exhausted, choose the action at the root. Common rules:
+
+- **Most-visited action** — `argmax_a N(root, a)`. Robust because visit counts are a low-variance summary of the search.
+- **Highest-value action** — `argmax_a W(s,a)/N(s,a)`. Higher variance, especially for rarely visited children.
+
+Most MCTS implementations use most-visited; AlphaZero also exposes visit counts as a training signal (the "improved policy" the network learns to imitate).
+
+## Why It Works
+
+MCTS is asymptotically a regret-minimizing search. Two properties are worth internalizing:
+
+- **Selective expansion.** Unlike minimax, MCTS doesn't expand all moves uniformly. UCB concentrates compute on the principal variation while still occasionally probing alternatives.
+- **No domain-specific evaluation needed.** Pure rollout MCTS works with only a simulator and terminal rewards. That's why it became the standard for general game-playing systems.
+
+The main weakness is that *bad rollouts make for bad estimates*. If your random rollout in chess routinely hangs the queen, the value estimates near the root are noise. The AlphaZero idea — swap the rollout for a learned value network — is exactly the fix.
+
+## MCTS vs Q-Learning at a Glance
+
+| | Q-learning / DQN | MCTS |
+|--|------------------|------|
+| When does it compute? | Once, during training | At every decision |
+| What does it store? | A function $Q_\theta(s, a)$ | A tree of stats $\{N, W\}$ |
+| Needs a simulator? | Either env or sim | **Yes — must roll forward** |
+| Generalizes across states? | Yes (function approx.) | No (tree is per-decision) |
+| Strength | Fast inference | Anytime, exact lookahead |
+
+The complementary strengths are why combining them — a learned $Q_\theta$ that *guides* MCTS — is so powerful. [AlphaZero](./alphazero/) is the cleanest example.
+## References
+
+- Coulom. *Efficient Selectivity and Backup Operators in Monte-Carlo Tree Search.* Computers and Games 2006 — the birth of MCTS. [HAL](https://inria.hal.science/inria-00116992)
+- Kocsis & Szepesvári. *Bandit Based Monte-Carlo Planning.* ECML 2006 — UCT. [Springer](https://link.springer.com/chapter/10.1007/11871842_29)
+- Browne et al. *A Survey of Monte Carlo Tree Search Methods.* IEEE T-CIAIG 4(1), 2012. [IEEE](https://ieeexplore.ieee.org/document/6145622)

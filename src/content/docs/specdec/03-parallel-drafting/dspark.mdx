@@ -1,0 +1,46 @@
+---
+title: "DSpark: Verification on a Budget"
+description: Suffix decay, semi-autoregressive drafting, and load-aware variable-length verification
+sidebar:
+  order: 1
+---
+
+import SuffixDecayViz from '../../../../components/visualizations/SuffixDecayViz';
+
+Everything so far priced speculation for **one request on an idle GPU**. Production doesn't look like that. At batch size $B$ with draft blocks of $K$ tokens, every step asks the target to verify $B \times K$ positions — and the "free" compute that made verification cheap in chapter 1 is exactly what a busy server no longer has. Speculation's discarded drafts stop being a private inefficiency and start displacing other people's requests. DSpark (DeepSeek + PKU, 2026) is the first of these methods designed *from* the serving side: it asks, per request and per step, **how much verification is actually worth buying?**
+
+## Problem 1: Suffix Decay
+
+A fully parallel drafter (a block-diffusion model, a set of multi-token heads) guesses position 9 without knowing what it guessed for position 8 — the block's positions are conditionally independent. Early positions are fine; later ones compound every upstream uncertainty, and per-position acceptance **decays along the block**. The prefix-acceptance semantics from chapter 1 make this brutal: a position contributes only if *everything* before it survived, so the survival curve is a product of decaying terms — most of a long block is dead weight before it's ever verified.
+
+DSpark's architectural fix is **semi-autoregressive drafting**: a parallel backbone proposes the block in one pass, and a *lightweight sequential module* (a Markov/RNN-scale coupler, not a second transformer) threads through it so each drafted token conditions on its predecessor within the block. One cheap sequential sweep restores most of the intra-block dependency — the decay flattens dramatically while drafting stays ~one-pass cheap.
+
+## Problem 2: Verifying Tokens That Are Already Dead
+
+Even a flattened survival curve decays. Verifying a 16-token block whose last six positions have under-10% survival spends batch capacity on near-certain rejections. DSpark prices this explicitly:
+
+- A **confidence head** on the drafter predicts each position's survival probability, calibrated with *Sequential Temperature Scaling* (STS) so predicted survival matches realized acceptance — the same "confidence ≈ acceptance" observation that powered [EAGLE-2's trees](../../02-eagle/dynamic-trees/), now calibrated and put in charge of real money.
+- A **load-aware scheduler** with an additive step-cost model, $T(B, K) = t_0 + \alpha(B) + \theta(M)$, computes the *marginal* cost of each extra verified token at the current batch size and greedily buys accepted-token yield until the margin goes negative — producing a **per-request verify window**. Predictable requests get long windows (~5–6 tokens on GSM8K-like traffic); open-ended ones get short windows (~3 on poetry); everyone stops paying for doomed suffixes.
+
+<SuffixDecayViz client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Blue bars are each block position's *survival* probability (the chance it is reached and accepted, Π αⱼ) — pruned positions are grayed out past the red cut line. The amber trace is the raw per-position acceptance αᵢ. Below, relative serving throughput as a function of where you cut, under an additive step-cost model.
+
+**Knobs.** The semi-AR toggle switches between a fully parallel drafter's heavy decay and the flattened curve the sequential module buys. τ sets the survival threshold that ends the verify window; B is the batch size the scheduler must respect.
+
+**Try this.** At B = 1, the optimal cut is essentially "verify everything" — trimming buys nothing on an idle GPU, which is why single-request papers never noticed this knob. Slide B to 64 and watch the throughput optimum march left: at high load, verifying a shorter, confident prefix beats verifying a long hopeful one by a wide margin — for the heavy-decay drafter the gain is the difference between speculation helping and speculation *hurting*. Then flip semi-AR on and see both problems shrink at once: higher survival everywhere, and a longer window worth buying.
+</div>
+
+## In Production
+
+The numbers that made this paper land: DeepSeek's **V4-Flash serves up to 85% faster** with DSpark enabled — no retraining, no weight changes — and V4-Pro sustains **383.7 tokens/s per request at TP=8** on Blackwell with acceptance length ≈ 5. The SGLang integration ships three verify modes (`static` full-block, `compact` per-request windows — the production path — and `cap-accept` for measuring the acceptance ceiling), packs variable-length verification into **ragged-batch CUDA graphs** to avoid padding waste, and hides the confidence-head relay behind SGLang's async overlap so scheduling adds zero step-time. The scheduling gains concentrate exactly where the model predicts: high batch sizes, where throughput has plateaued and every wasted verify slot is a real request not served.
+
+:::note[The track, in one sentence each]
+Chapter 1: verification is a free lunch (draft anything, lose nothing). EAGLE: make the guesses good — draft from the target's own state. DFlash: make the guessing itself one parallel pass. DSpark: under real load the lunch isn't free — meter it, per request, per step.
+:::
+
+## References
+
+- *DSpark: Confidence-Scheduled Speculative Decoding with Semi-Autoregressive Generation.* [arXiv:2607.05147](https://arxiv.org/abs/2607.05147)
+- LMSYS. *DSpark in SGLang: Speculative Decoding with Confidence-Driven, Variable-Length Verification.* [lmsys.org](https://www.lmsys.org/blog/2026-07-06-dspark-sglang)

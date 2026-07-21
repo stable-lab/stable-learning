@@ -1,0 +1,53 @@
+---
+title: "EAGLE: Drafting in Feature Space"
+description: Stop training a small language model — autoregress the target's own features
+sidebar:
+  order: 0
+---
+
+import EagleFeatureFlow from '../../../../components/visualizations/EagleFeatureFlow';
+
+The speedup arithmetic left us a job description: find a drafter with **high α** (its guesses must overlap the target's distribution) and **tiny c** (it must be nearly free). A separate small LM fails both ways at once — it's still a whole model to run, and it disagrees with the target precisely on the tokens that matter, because it processes the context with a fraction of the capacity. Worse, you may not even *have* a small sibling model with the same tokenizer.
+
+EAGLE's move: don't build a second language model at all. **Bolt one transformer layer onto the target, and autoregress in the target's own feature space.**
+
+## The Mechanism
+
+When the target model emits token $x_{t+1}$, it computes — one linear layer before the logits — a feature vector $f_t$ (the second-to-top-layer hidden state). That vector is a rich, *continuous* summary of everything the full model understood about the context. EAGLE's draft head is a **single decoder layer** that learns feature dynamics:
+
+$$
+\hat{f}_{t+1} = \text{DraftLayer}\big(\,[\,f_t \,;\, \text{Emb}(x_{t+1})\,]\,\big),
+\qquad
+\hat{x}_{t+2} \sim \text{LMHead}(\hat{f}_{t+1})
+$$
+
+<EagleFeatureFlow client:visible />
+
+<div class="viz-caption">
+**What it shows.** The target model runs once and hands the draft head two things: its second-to-top feature f_t (amber) and the token the sampler actually chose (green). The one-layer head combines them, predicts the next *feature*, decodes it through the target's frozen LM head — then feeds its own output back, γ times (purple loop). Each recurrence costs one layer, not one model.
+</div>
+
+Three details carry all the weight:
+
+1. **It predicts the next *feature*, not the next token.** Feature-space regression is a smooth, information-dense objective; token-space drafting forces a tiny model to reproduce a full distribution from scratch. The predicted feature is then decoded by the target's **frozen LM head** — the drafter inherits the target's entire output vocabulary machinery for free.
+2. **It consumes the *sampled* token $x_{t+1}$, not just $f_t$.** The feature $f_t$ determines a distribution; the actual future depends on which token the sampler then drew. After "I", the world where we sampled "am" and the world where we sampled "always" have different next features — a head fed only $f_t$ must average these incompatible futures (a bimodal regression target). Feeding the sampled token resolves the sampling uncertainty, and ablating it collapses acceptance rates. This is EAGLE's single most important design choice.
+3. **To draft γ tokens, autoregress the head:** feed $\hat{f}_{t+1}$ and the sampled $\hat{x}_{t+2}$ back in. Each step costs one layer instead of one model — for a 32-layer target, $c \approx 1/32$ before overheads.
+
+Training is equally light: the target stays frozen; only the draft layer trains (feature regression + token cross-entropy) on a fixed corpus of ~70k conversations. No fine-tuning of the served model, no risk to its quality — the acceptance rule from chapter 1 guarantees that even a *badly* trained head only costs speed.
+
+## Drafting a Tree, Not a Chain
+
+One drafted chain bets everything on its first token. EAGLE instead drafts a small **tree** of alternatives (a few candidates at each of the first positions) and verifies the whole tree in one target pass with [tree attention](../01-fundamentals/tree-verification/) — the mask-shaped-like-the-tree mechanism from chapter 1. EAGLE-1 fixes the tree's *shape* in advance — the same branching pattern for every context. That static shape is exactly what [EAGLE-2](dynamic-trees/) makes adaptive, and where this chapter's live demo lives.
+
+## What It Buys
+
+On the standard benchmarks (MT-Bench, HumanEval, GSM8K), EAGLE-1 reaches **2.7–3.5×** end-to-end over vanilla decoding — with average acceptance lengths around 3.5–4.5 tokens per target pass — and it is fully lossless. The head is small enough to train in a day or two and ship next to any checkpoint.
+
+:::note[Why this matters beyond EAGLE]
+"Give the drafter the target's internal state" turned out to be *the* load-bearing idea of the whole modern line. EAGLE-2 reuses the head's confidences to shape trees; EAGLE-3 deepens which features it reads; DFlash injects target context straight into a diffusion drafter's KV cache. Every one of them is a variation on: **the cheapest source of draft quality is the target model itself.**
+:::
+
+## References
+
+- Li, Wei, Zhang, Zhang. *EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty.* ICML 2024. [arXiv:2401.15077](https://arxiv.org/abs/2401.15077)
+- Official implementation: [SafeAILab/EAGLE](https://github.com/SafeAILab/EAGLE)

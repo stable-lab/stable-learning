@@ -1,0 +1,98 @@
+---
+title: Proximal Policy Optimization (PPO)
+description: Stable policy updates with clipped surrogate objectives
+sidebar:
+  order: 0
+---
+
+import PPORatio from '../../../../components/visualizations/PPORatio';
+import PPOTrainingDynamics from '../../../../components/visualizations/PPOTrainingDynamics';
+
+**PPO** (Schulman et al., 2017) is the workhorse of modern RL. It improves on vanilla policy gradient by constraining how much the policy can change in each update, leading to more stable training.
+
+## Motivation: The Trust Region
+
+REINFORCE updates can be unstable — you saw this in [chapter 1's live demo](../01-action-chain-rewards/), where cranking the learning rate froze the policy onto a bad route, irreversibly. The problem gets *worse* in practice, because for sample efficiency we want to reuse each batch of trajectories for **several** gradient epochs — and every epoch after the first is computed under a policy that no longer matches the one that collected the data. The idea behind PPO is to keep the new policy "close" to the old one, so that reuse stays safe. At the bottom of this page you can run the full loop and toggle the safety off.
+
+We define the **probability ratio**:
+
+$$
+r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_\text{old}}(a_t \mid s_t)}
+$$
+
+When $r_t = 1$, the new and old policies agree. When $r_t$ deviates far from 1, the policy has changed significantly.
+
+### Interactive: When Does the Clip Activate?
+
+Slide $\pi_\text{new}$ to see the ratio cross the trust-region edges $[1-\varepsilon, 1+\varepsilon]$.
+
+<PPORatio client:only="react" />
+
+### Worked Example
+
+$\pi_\text{old} = 0.20, \varepsilon = 0.2$. Then $1 - \varepsilon = 0.8$ and $1 + \varepsilon = 1.2$, so $\pi_\text{new}$ must stay in $[0.16, 0.24]$ to be inside the trust region. If a gradient step pushes $\pi_\text{new}$ to $0.30$, the ratio $r = 1.50$ is clipped to $1.20$ for a *good* advantage (the objective stops growing), but stays uncapped if $\hat A < 0$ (the policy *can* be punished more for a bad action). This asymmetric clip is what stops one bad batch from collapsing the policy.
+
+## The Surrogate Objective
+
+The vanilla surrogate objective is:
+
+$$
+L^{CPI}(\theta) = \mathbb{E}_t \left[ r_t(\theta) \hat{A}_t \right]
+$$
+
+where $\hat{A}_t$ is the estimated advantage. But maximizing this without constraint can lead to excessively large policy updates.
+
+## PPO's Clipped Objective
+
+PPO clips the ratio to prevent large updates:
+
+$$
+L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min \left( r_t(\theta) \hat{A}_t, \; \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]
+$$
+
+The $\min$ ensures:
+- When $\hat{A}_t > 0$ (good action): the ratio is capped at $1 + \epsilon$, preventing over-reinforcement
+- When $\hat{A}_t < 0$ (bad action): the ratio is capped at $1 - \epsilon$, preventing over-punishment
+
+The typical value is $\epsilon = 0.2$.
+
+## PPO Algorithm
+
+```
+Initialize policy π_θ and value function V_φ
+for each iteration:
+    Collect trajectories using π_θ
+    Compute advantages Â_t using GAE
+    for each mini-batch epoch:
+        Compute r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)
+        L_clip = min(r_t·Â_t, clip(r_t, 1-ε, 1+ε)·Â_t)
+        Update θ to maximize L_clip
+        Update φ to minimize (V_φ(s_t) - G_t)²
+    θ_old ← θ
+```
+
+## Live: The Whole Loop, With and Without the Clip
+
+Everything above, running: batches are collected from $\pi_{\theta_\text{old}}$, advantages are normalized, and the *same batch* is reused for several epochs of surrogate ascent — exactly the loop in the pseudocode.
+
+<PPOTrainingDynamics client:only="react" />
+
+<div class="viz-caption">
+**What it models.** PPO on a 10-armed bandit (batch = 16 pulls, noisy rewards). Blue bars are π; gray bars behind them are each arm's true mean reward, so you can see whether the policy is concentrating on the right one. The purple histogram shows where the batch's probability ratios ρᵢ end up after the reuse epochs — the green band is the clip region [1−ε, 1+ε].
+
+**Knobs.** The clip toggle is the experiment; ε sets the band width; *epochs per batch* controls how hard each batch is reused (this is the off-policy pressure); learning rate scales every step.
+
+**Try this.** Run the defaults to convergence — with clipping the ratios never leave the band and KL stays flat. Now reset, switch clipping **off**, and push epochs to 16: within a few dozen updates some ratios blow past 3 into the red overflow bucket, KL spikes, and the policy usually locks onto a mediocre arm the batch happened to flatter. Turn clipping back on mid-collapse and watch KL flatten again. Offline calibration of this exact setup: clip on converges 25/25 runs; clip off, 6/25.
+</div>
+
+:::note[PPO in LLM Training]
+PPO is the algorithm behind RLHF (Reinforcement Learning from Human Feedback). The language model is the policy, token generation is the action, and the reward comes from a reward model trained on human preferences. The "old policy" is the model from the previous iteration.
+:::
+
+:::caution[Common misconception: "PPO is a trust-region method."]
+PPO is *inspired* by trust-region methods (TRPO) but does not enforce a hard KL constraint. The clipping only zeros the gradient *for already-large ratios*; nothing forbids the policy from drifting outside the clip region across many epochs of optimization. Empirically the multi-epoch SGD on a finite buffer keeps things in check, but pathological learning rates or extreme advantages can still produce huge policy shifts. The clip is a *soft* surrogate — it removes the incentive to make large moves but doesn't strictly forbid them. That's why production PPO implementations also monitor a separate KL estimate and either early-stop or anneal the learning rate when it spikes.
+:::
+## References
+
+- Schulman, Wolski, Dhariwal, Radford, Klimov. *Proximal Policy Optimization Algorithms.* 2017. [arXiv:1707.06347](https://arxiv.org/abs/1707.06347)
+- Schulman et al. *Trust Region Policy Optimization.* ICML 2015 — the hard-constraint ancestor the clip approximates. [arXiv:1502.05477](https://arxiv.org/abs/1502.05477)

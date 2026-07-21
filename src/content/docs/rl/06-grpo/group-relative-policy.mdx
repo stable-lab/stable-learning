@@ -34,6 +34,30 @@ Compare how GRPO's group-relative advantages differ from PPO's value-function ba
 - Click "New group" to see different reward distributions
 :::
 
+## Worked Example: Computing Group Advantages
+
+Suppose we sample $G = 4$ outputs for the same prompt and a reward model scores them:
+
+| Output | $r_i$ |
+|--------|-------|
+| $y_1$ | 0.9 |
+| $y_2$ | 0.4 |
+| $y_3$ | 0.7 |
+| $y_4$ | 0.2 |
+
+Mean: $\mu = (0.9 + 0.4 + 0.7 + 0.2)/4 = 0.55$
+
+Variance: $\tfrac{1}{4}[(0.35)^2 + (-0.15)^2 + (0.15)^2 + (-0.35)^2] = 0.0725$; std $\sigma = 0.269$.
+
+| Output | $r_i - \mu$ | $\hat A_i = (r_i - \mu) / \sigma$ |
+|--------|------------|-----------------------------------|
+| $y_1$ | +0.35 | **+1.30** |
+| $y_2$ | −0.15 | −0.56 |
+| $y_3$ | +0.15 | +0.56 |
+| $y_4$ | −0.35 | −1.30 |
+
+Two outputs are reinforced ($\hat A > 0$), two are pushed down — without ever consulting a learned value function. Now suppose a different prompt where all 4 outputs are excellent and score $\{0.91, 0.92, 0.90, 0.93\}$. The mean is 0.915, the spread is tiny, but after normalization the advantages still come out near $\pm 1$ — *normalized to peer comparison*, not to absolute reward. This is exactly why hard prompts (where every sample looks bad) and easy prompts (where every sample looks good) contribute comparable learning signal.
+
 ## Why Group Normalization Works
 
 The group mean $\mu_G$ serves the same role as the critic baseline $V(s)$ in PPO:
@@ -90,3 +114,7 @@ Looking back at our progression:
 4. **GRPO** simplified the pipeline by replacing the learned critic with group-relative normalization
 
 Each step builds on the last — GRPO is best understood as "PPO without the critic, made possible by sampling multiple outputs per prompt."
+## References
+
+- Shao et al. *DeepSeekMath.* 2024, §4 — the group-relative advantage and per-token KL approximation used above. [arXiv:2402.03300](https://arxiv.org/abs/2402.03300)
+- Yu et al. *DAPO: An Open-Source LLM Reinforcement Learning System at Scale.* 2025 — dynamic sampling: filtering the all-correct/all-wrong groups whose σ = 0 signal vanishes (the "wasted groups" you can watch in the live demo on the previous page). [arXiv:2503.14476](https://arxiv.org/abs/2503.14476)

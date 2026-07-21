@@ -5,6 +5,8 @@ sidebar:
   order: 0
 ---
 
+import NUMALatency from '../../../../components/visualizations/NUMALatency';
+
 ## Snooping vs. Directory-Based
 
 The MSI/MESI protocols we studied use **snooping**: every cache watches a shared bus for coherence messages. This has a fundamental scalability problem — the bus becomes a bottleneck as core count increases.
@@ -47,6 +49,16 @@ Core 0   Core 1   Core 2   Core 3
 | Scalability | Poor (8–16 cores max) | Good (100s of cores) |
 | Complexity | Simpler | More complex |
 | Storage overhead | None | Directory entries per cache line |
+
+## Interactive: NUMA Allocation Cost
+
+A 4-socket box arranged as a 2×2 mesh. Pick which socket your thread runs on and how memory is distributed; watch the average access latency change. Default allocations (uniform 25%) give the "wrong" answer when one socket is doing all the work — interleaving is fair but slow.
+
+<NUMALatency client:only="react" />
+
+:::caution[Common misconception: "Default Linux NUMA policy is fine."]
+The default `numactl --interleave=all` spreads pages round-robin across sockets. On a 4-socket box that means 75% of your thread's accesses go remote (1- or 2-hop) — turning a local 80 ns load into ~150 ns *on average*. For latency-sensitive work, pin memory to the socket running the thread (`numactl --localalloc` or `--preferred=N`). For throughput-sensitive parallel work where every socket is busy, interleaving is fine because remote bandwidth is aggregate. The right answer depends on whether you're optimizing latency or throughput.
+:::
 
 ## Real-World Examples
 

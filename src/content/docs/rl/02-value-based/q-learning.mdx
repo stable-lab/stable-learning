@@ -1,0 +1,140 @@
+---
+title: Q-Learning
+description: Off-policy temporal-difference control with a worked example
+sidebar:
+  order: 1
+---
+
+import QLearningGrid from '../../../../components/visualizations/QLearningGrid';
+
+**Q-learning** (Watkins, 1989) is the foundational off-policy TD algorithm. It learns $Q^*$ directly without ever needing to know the transition dynamics.
+
+## The Update Rule
+
+After observing a transition $(s, a, r, s')$:
+
+$$
+Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]
+$$
+
+Three knobs:
+
+| Symbol | Role | Typical |
+|--------|------|---------|
+| $\alpha$ | Learning rate — how much to move toward the target | $0.1$ |
+| $\gamma$ | Discount factor — how far ahead we plan | $0.9$–$0.99$ |
+| $\epsilon$ | Exploration rate for $\epsilon$-greedy action selection | $0.1$, often annealed |
+
+The $\max_{a'}$ in the target makes this **off-policy**: regardless of what action the agent actually takes next, the update assumes it will subsequently act greedily. This is what lets us improve $Q$ even when we sometimes act randomly for exploration.
+
+## Pseudocode (Tabular)
+
+```
+Initialize Q(s, a) arbitrarily (e.g., zeros), Q(terminal, ·) = 0
+for each episode:
+    s ← initial state
+    while s is not terminal:
+        a ← ε-greedy action from Q(s, ·)
+        Take action a, observe r and s'
+        Q(s, a) ← Q(s, a) + α [r + γ · max_{a'} Q(s', a') − Q(s, a)]
+        s ← s'
+```
+
+**Convergence guarantee.** With a tabular representation, every $(s, a)$ visited infinitely often, and a step-size schedule satisfying $\sum \alpha_t = \infty$, $\sum \alpha_t^2 < \infty$, $Q$ converges to $Q^*$ with probability 1. The guarantee evaporates once function approximation (neural nets) enters the picture — see [DQN](../dqn/).
+
+## Worked Example: 1D Gridworld
+
+Consider a 5-cell corridor. The agent starts at cell `S`, and the goal `G` is at the right end. A trap `T` sits in the middle.
+
+```
+| S |   | T |   | G |
+  0   1   2   3   4
+```
+
+- Actions: `L` (left), `R` (right). Hitting a wall keeps you in place.
+- Rewards: step = $-1$, trap = $-10$ (terminal), goal = $+10$ (terminal).
+- Settings: $\gamma = 0.9$, $\alpha = 0.5$, deterministic transitions.
+
+The optimal trajectory avoids the trap by going `R, R, R, R` is impossible (we'd hit the trap at cell 2). With only L/R available, every path from cell 0 to cell 4 passes through cell 2 — so the trap *is* unavoidable in this layout. Let us instead make the trap a *penalty cell* the agent merely passes through with reward $-10$ (not terminal). The optimal return from start is:
+
+$$
+G_0 = -1 + \gamma(-1) + \gamma^2(-10) + \gamma^3(-1) + \gamma^4(+10) = -1 - 0.9 - 8.1 - 0.729 + 6.561 \approx -4.17
+$$
+
+### Hand-Computing One Update
+
+Suppose the agent is in cell 3 and currently has $Q(3, R) = 0$, $Q(4, \cdot) = 0$. It takes action `R`, lands in cell 4 (goal), gets $r = +10$, and the episode terminates. The TD target is:
+
+$$
+r + \gamma \max_{a'} Q(s', a') = 10 + 0.9 \cdot 0 = 10
+$$
+
+(The bootstrap term is zero because cell 4 is terminal.) The update:
+
+$$
+Q(3, R) \leftarrow 0 + 0.5 \cdot (10 - 0) = 5
+$$
+
+On the next episode, when the agent reaches cell 3 and acts greedily, $Q(3, R) = 5$ now beats $Q(3, L) = 0$ — the value has propagated **one step backward** from the goal.
+
+### Value Propagation
+
+After many episodes, the Q-values converge so that the value of acting optimally from cell $i$ matches the discounted optimal return. For the corridor (with trap as penalty, not terminal):
+
+| Cell $i$ | $Q^*(i, R)$ | $Q^*(i, L)$ | Greedy action |
+|----------|-------------|-------------|---------------|
+| 0 | $\approx -4.17$ | $\approx -5.65$ (bumps wall, then same path) | R |
+| 1 | $\approx -3.52$ | $\approx -5.07$ | R |
+| 2 | $\approx -2.80$ | $\approx -8.20$ | R |
+| 3 | $\approx +8.00$ | $\approx -3.49$ | R |
+| 4 | terminal | terminal | — |
+
+The values "flow" from the goal backward through the chain — exactly what the Bellman recursion does, but learned from samples.
+
+## Interactive: Train Q-Learning on a Gridworld
+
+Step or auto-run a tabular Q-learning agent on a 4×4 grid with a goal (+10), a trap (−10), and a wall. The colored heatmap shows $\max_a Q(s,a)$; the arrows show the current greedy policy; every step's TD update is displayed on the right.
+
+<QLearningGrid client:only="react" />
+
+:::caution[Common misconception: "More exploration always helps."]
+If you set ε to a large value (say 0.6) and train 1000 steps, the value heatmap actually looks *worse* than with ε = 0.1 after the same number of updates. Random actions visit the trap repeatedly, dragging $Q$ values down along paths a greedy agent would never take. ε needs to be **just enough** to escape local commitments — typically high at the start and annealed down. Conversely, ε = 0 with poor initial Q lets the agent get stuck cycling without ever finding the goal: no updates flow back from the +10 reward.
+:::
+
+## Exploration: Why $\epsilon$-Greedy?
+
+If the agent always picked $\arg\max_a Q(s, a)$, it would commit to whatever looked best initially and never discover that a different action might be better. The simplest fix is **$\epsilon$-greedy**:
+
+$$
+a = \begin{cases} \text{uniform random action} & \text{with probability } \epsilon \\ \arg\max_a Q(s, a) & \text{with probability } 1 - \epsilon \end{cases}
+$$
+
+Typical schedule: start $\epsilon = 1.0$ (pure exploration), anneal toward $0.05$ as $Q$ stabilizes.
+
+:::tip[The exploration–exploitation tradeoff]
+Every RL algorithm has to balance these two. Q-learning uses $\epsilon$-greedy; policy gradient uses [stochastic policies](../../04-policy-gradient/); [MCTS](../../03-mcts/) uses UCB. They are all answers to the same question: when do I try something new vs. cash in on what I already know?
+:::
+
+## SARSA, in Contrast
+
+SARSA's update uses the action *actually taken* next, not the argmax:
+
+$$
+Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma\, Q(s', a') - Q(s, a) \right], \quad a' \sim \pi
+$$
+
+In the gridworld example, if SARSA's $\epsilon$-greedy occasionally moves left near a cliff, SARSA *learns* about those random left moves and becomes cautious — it learns the value of an exploratory policy. Q-learning ignores them in its target and learns the value of the greedy policy. The classic "cliff walking" experiment in Sutton & Barto shows SARSA picking a safer (longer) path and Q-learning hugging the cliff.
+
+## Limitations of Tabular Q-Learning
+
+Q-learning as described stores one number per state–action pair. This is fine for a 5-cell corridor, but:
+
+- **State explosion** — a $19 \times 19$ Go board has more states than atoms in the observable universe.
+- **Continuous states** — you cannot index a table by a real number.
+- **No generalization** — visiting state $s$ teaches you nothing about a similar state $s'$.
+
+The fix is to replace the table with a function approximator — typically a neural network — and call it [DQN](../dqn/).
+## References
+
+- Watkins. *Learning from Delayed Rewards.* PhD thesis, Cambridge, 1989 — where Q-learning was introduced.
+- Watkins & Dayan. *Q-learning.* Machine Learning 8, 1992 — convergence with probability 1 under the step-size conditions quoted above. [Springer](https://link.springer.com/article/10.1007/BF00992698)

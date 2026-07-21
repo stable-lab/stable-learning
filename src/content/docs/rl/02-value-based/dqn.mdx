@@ -1,0 +1,111 @@
+---
+title: Deep Q-Networks (DQN)
+description: Scaling Q-learning to high-dimensional state spaces
+sidebar:
+  order: 2
+---
+
+import ReplayBufferDemo from '../../../../components/visualizations/ReplayBufferDemo';
+
+**DQN** (Mnih et al., 2015) is the algorithm that put deep RL on the map — learning to play Atari games from raw pixels, using a single architecture across 49 games.
+
+The core idea is one line: **replace the Q-table with a neural network** $Q_\theta(s, a)$. Everything else in the algorithm exists to make this work without diverging.
+
+## Why Naive Function Approximation Fails
+
+If we plug a neural net into the Q-learning update, we end up minimizing:
+
+$$
+L(\theta) = \mathbb{E}\Big[\big(\underbrace{r + \gamma \max_{a'} Q_\theta(s', a')}_{\text{target}} - Q_\theta(s, a)\big)^2\Big]
+$$
+
+Two problems make this unstable in practice:
+
+1. **Correlated samples.** Successive transitions $(s, a, r, s')$ along a trajectory are highly correlated. SGD assumes i.i.d. samples — feeding it a near-sequential stream causes the network to overfit to recent experience and forget earlier states.
+2. **Moving target.** The target $r + \gamma \max_{a'} Q_\theta(s', a')$ depends on $\theta$ — the very thing we are updating. Each step shifts both the prediction and what it is chasing, and the loop can diverge.
+
+DQN's two main innovations each fix one of these.
+
+## Innovation 1: Experience Replay
+
+Store every transition in a circular buffer $\mathcal{D}$ (typically $10^6$ entries). Each gradient step samples a random mini-batch from $\mathcal{D}$.
+
+- **Decorrelates samples** — random mini-batches look closer to i.i.d.
+- **Reuses experience** — every transition trains the network many times.
+- **Requires off-policy** — the replayed action came from an old policy, so the update must work regardless. Q-learning's $\max$ target makes this OK; on-policy methods like SARSA cannot use a replay buffer the same way.
+
+### Interactive: Why It Matters
+
+Below, the *same* trainer fits a target function $Q^*(s) = \sin(s/2)$ with the same learning rate. One model trains on the latest sample (sequential, correlated). The other samples random mini-batches from a buffer. Shrink the buffer to a tiny size (say 10) and the replay model collapses back to the naive one — confirming the *random* mixing is what matters, not just "having a buffer."
+
+<ReplayBufferDemo client:only="react" />
+
+:::caution[Common misconception: "Bigger replay buffer is always better."]
+A larger buffer holds older transitions for longer. If the policy has changed substantially since they were collected, those samples are from a *different distribution* — they still satisfy the off-policy target ($\max Q$ doesn't care which policy collected the data), but very stale samples teach the network about regions the current policy never visits anymore, slowing learning. The fix used by Rainbow and others is **prioritized** replay (sample by TD-error) plus a buffer size matched to the task horizon, not the largest you can afford.
+:::
+
+## Innovation 2: Target Network
+
+Maintain a second set of weights $\theta^-$, copied from $\theta$ periodically (every $C$ steps, e.g. $C = 10{,}000$). Compute the bootstrap target using $\theta^-$:
+
+$$
+y = r + \gamma \max_{a'} Q_{\theta^-}(s', a')
+$$
+
+The target is now stationary between syncs, breaking the moving-target feedback loop.
+
+## The Full Loss
+
+$$
+L(\theta) = \mathbb{E}_{(s, a, r, s') \sim \mathcal{D}} \Big[\big(r + \gamma \max_{a'} Q_{\theta^-}(s', a') - Q_\theta(s, a)\big)^2\Big]
+$$
+
+## Pseudocode
+
+```
+Initialize Q_θ, target network Q_θ⁻ ← Q_θ, replay buffer D
+for each step:
+    a ← ε-greedy from Q_θ(s, ·)
+    Take action a, observe r, s', store (s, a, r, s') in D
+    Sample mini-batch (s_i, a_i, r_i, s'_i) from D
+    y_i ← r_i + γ · max_{a'} Q_θ⁻(s'_i, a')      # use target net
+    Update θ to minimize Σ (y_i - Q_θ(s_i, a_i))²
+    every C steps: θ⁻ ← θ
+```
+
+## Common Extensions
+
+DQN spawned a small zoo of improvements:
+
+| Variant | Idea | Fixes |
+|---------|------|-------|
+| **Double DQN** | Use $\arg\max$ from online net, value from target net | Q-learning's well-known overestimation bias |
+| **Dueling DQN** | Architecturally split $Q = V + A$ | Better learning when action choice doesn't matter much |
+| **Prioritized replay** | Sample transitions with high TD-error more often | Faster credit assignment |
+| **Rainbow** | Combine 6 of these tricks | All of the above, plus distributional RL and noisy nets |
+
+## When to Reach for DQN
+
+DQN-style methods shine when:
+
+- The action space is **discrete and small** (Atari, board games, simple robot control).
+- You have a clean, fast simulator and can collect lots of off-policy data.
+- The state space is high-dimensional (pixels, sensors) — that's where the neural net earns its keep.
+
+They struggle when:
+
+- Actions are **continuous** — there's no easy $\arg\max_a$ over a $\mathbb{R}^d$. (DDPG, SAC fix this by adding a separate policy network.)
+- **Action chains are very long** with sparse reward — credit assignment is hard even with replay.
+- The optimal policy is **inherently stochastic** — $\arg\max$ always gives a deterministic policy.
+
+The last two limitations are part of why language-model RLHF uses [policy gradient methods](../../04-policy-gradient/) and [PPO](../../05-ppo/) instead of DQN: the action space is vast (50k+ tokens), reward is sparse (often only at end of generation), and stochastic sampling is essential.
+
+## Connection to MCTS
+
+Even DQN with all its bells and whistles only looks **one step ahead** via the bootstrap. When the value network is imperfect — and it always is early in training — one-step lookahead has limited reach.
+
+[Monte Carlo Tree Search](../../03-mcts/) addresses this by **planning multiple steps forward** using the current value estimate as a heuristic. AlphaZero combines the two: a neural net predicts $V$ and a prior policy, and MCTS uses both to search deeply. The next section makes this concrete.
+## References
+
+- Mnih et al. *Playing Atari with Deep Reinforcement Learning.* 2013. [arXiv:1312.5602](https://arxiv.org/abs/1312.5602)
+- Mnih et al. *Human-level control through deep reinforcement learning.* Nature 518, 2015 — replay buffer + target network, the version described here. [Nature](https://www.nature.com/articles/nature14236)

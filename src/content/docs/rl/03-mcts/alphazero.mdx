@@ -1,0 +1,114 @@
+---
+title: AlphaZero — MCTS Meets Deep RL
+description: Combining a learned value/policy net with tree search
+sidebar:
+  order: 3
+---
+
+AlphaZero (Silver et al., 2017) ties together the two halves of this course so far: a [Q/value-function-style](../../02-value-based/) neural network, and [Monte Carlo Tree Search](../). Each one fixes a weakness of the other.
+
+| | Vanilla MCTS | Deep RL (DQN, PPO) | AlphaZero |
+|--|--------------|--------------------|-----------|
+| Plans at decision time? | Yes | No | Yes |
+| Generalizes across states? | No | Yes | Yes |
+| Needs rollouts to estimate $V$? | Yes (noisy) | No (net predicts) | No |
+| Trained from? | N/A | Env interactions | **Self-play** |
+
+## The Neural Network
+
+A single network $f_\theta(s) = (\mathbf{p}, v)$ outputs:
+
+- $\mathbf{p}$ — a **prior policy** over legal actions (a probability distribution)
+- $v \in [-1, 1]$ — a **value estimate** of the current state from the side-to-move's perspective
+
+Both heads share a residual-tower trunk that consumes the board state. The two outputs replace, respectively, the *random rollout policy* and the *terminal rollout return* used by plain MCTS.
+
+## MCTS with the Network
+
+The selection rule changes from UCT to **PUCT**:
+
+$$
+\text{PUCT}(s, a) = Q(s, a) + c_{\text{puct}} \cdot P(s, a) \cdot \frac{\sqrt{N(s)}}{1 + N(s, a)}
+$$
+
+where $P(s, a) = \mathbf{p}_a$ is the network's prior. The exploration term still shrinks with $N(s, a)$, but now it is *weighted by the policy net's belief* about how good action $a$ is. The search front-loads compute on plausible moves.
+
+The simulation phase changes drastically:
+
+```
+Plain MCTS:           AlphaZero:
+- expand a leaf       - expand a leaf
+- random rollout      - query network: (p, v) = f_θ(s)
+  to terminal         - use p as prior on this node's children
+- z = terminal        - z = v (the network's value, not a real rollout)
+- backprop z          - backprop z
+```
+
+**No rollouts.** A single forward pass produces both the prior and a direct value estimate. This is much faster than random rollouts and — crucially — much less noisy in domains where random play is a terrible proxy for skilled play (e.g., Go).
+
+## Training: MCTS as a Policy Improver
+
+The brilliance of AlphaZero is the training loop. The intuition: **MCTS, given a decent network, produces a *better* policy than the network alone.** So we train the network to imitate MCTS.
+
+```
+Initialize network θ randomly
+Loop:
+    Self-play:
+        For many games, play both sides using MCTS guided by f_θ
+        Record (s_t, π_t, z_T) for each move where:
+            π_t = visit-count distribution at the root of MCTS at step t
+            z_T = final game outcome from s_t's perspective
+    Training:
+        Sample (s, π, z) from the replay buffer
+        Loss = (z − v_θ(s))² − π^⊤ log p_θ(s) + λ ||θ||²
+        Update θ
+```
+
+The loss has three pieces:
+
+| Term | Trains | Target |
+|------|--------|--------|
+| $(z - v_\theta)^2$ | Value head | Actual game outcome |
+| $-\boldsymbol{\pi}^\top \log \mathbf{p}_\theta$ | Policy head (cross-entropy) | MCTS visit distribution |
+| $\lambda \|\theta\|^2$ | Regularization | — |
+
+This is **expert iteration**: MCTS is the expert (because it does lookahead), the network is the apprentice (cheap, but no lookahead). Each round of training makes the network closer to what MCTS would do, which in turn makes the *next* round of MCTS even stronger because its prior $P$ and value $V$ are better.
+
+## Why It Works
+
+Three feedbacks compound:
+
+1. **Better $v_\theta$** → MCTS evaluates leaves more accurately → it picks better moves in self-play → the training data $z$ reflects stronger play.
+2. **Better $\mathbf{p}_\theta$** → PUCT spends compute on the right moves → MCTS finds higher-value lines faster → visit distribution $\boldsymbol{\pi}$ encodes more depth.
+3. **MCTS as oracle.** Even with a mediocre network, MCTS with a thousand simulations finds moves the raw network would miss. Training on those moves teaches the network to recognize them in one forward pass next time.
+
+It is a "policy improvement operator" in the formal sense: under mild assumptions, MCTS' policy is at least as good as the network's policy, so training to imitate MCTS is monotonic.
+
+## AlphaZero vs Q-Learning vs PPO
+
+This is the moment to step back and see where everything fits:
+
+| Approach | Compute at decision time | Sample efficiency | Best for |
+|----------|--------------------------|-------------------|----------|
+| **Q-learning / DQN** | One forward pass | Medium (replay reuses data) | Discrete actions, fast-inference needs |
+| **Policy gradient / PPO** | One forward pass | Lower (mostly on-policy) | Continuous or vast discrete action spaces, stochastic policies |
+| **MCTS** | Heavy (many sims) | N/A (no learning) | Deterministic, sim-able domains with a terminal reward |
+| **AlphaZero** | Heavy (many sims w/ NN) | Very high — every move is supervised by MCTS | Two-player perfect-info games; combinatorial planning |
+
+For LLM training (the next sections — [PPO](../../05-ppo/), [GRPO](../../06-grpo/)) we typically don't run MCTS at every token — the action space is far too large and rollouts are too slow. But the AlphaZero playbook still inspires modern reasoning systems: a verifier + search loop generates higher-quality data than the base model, and the base model trains to imitate it. The names change; the structure does not.
+
+## What MCTS Doesn't Solve
+
+It is worth being explicit about MCTS' weaknesses, because they tell you when to reach for something else:
+
+- **Continuous actions** — there is no obvious "untried action" to expand. Variants (kernel-based UCB, progressive widening) exist but are not as clean.
+- **Stochastic environments** — chance nodes inflate the branching factor and weaken UCT's guarantees. There are extensions (e.g., POMCP for POMDPs), but they are heavier.
+- **Long horizons with shaped reward** — MCTS implicitly assumes informative terminal signals. When rewards are dense and intermediate, value-based or policy-gradient methods often dominate.
+- **No transfer.** The tree is thrown away (or reused only along the played line). Knowledge from solving one position does not help future positions without a learned net.
+
+That last point is the entire reason for combining MCTS with deep learning: the tree's wisdom flows into the network, the network's wisdom flows into the next tree, and the loop closes.
+## References
+
+- Silver et al. *Mastering the game of Go with deep neural networks and tree search.* Nature 529, 2016 (AlphaGo). [Nature](https://www.nature.com/articles/nature16961)
+- Silver et al. *Mastering the game of Go without human knowledge.* Nature 550, 2017 (AlphaGo Zero). [Nature](https://www.nature.com/articles/nature24270)
+- Silver et al. *A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play.* Science 362, 2018 (AlphaZero). [arXiv:1712.01815](https://arxiv.org/abs/1712.01815)

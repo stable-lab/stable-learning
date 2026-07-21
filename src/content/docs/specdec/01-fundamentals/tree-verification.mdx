@@ -1,0 +1,52 @@
+---
+title: Tree Verification
+description: How one forward pass verifies many futures at once
+sidebar:
+  order: 3
+---
+
+import TreeVerifyViz from '../../../../components/visualizations/TreeVerifyViz';
+
+A chain draft is a single bet, compounded. If position 1 dies, positions 2 through γ die with it — every draft after the first rejection was conditioned on a token that no longer exists. At α = 0.75 a six-token chain loses its whole tail to a first-token rejection **a quarter of the time**. The obvious hedge is to draft *alternatives*: two or three candidates for the risky early positions, longer runs where the drafter is confident. That turns the draft from a chain into a **tree** — and it seems to create a new problem. A tree with eight nodes contains several incompatible futures; verifying each root-to-leaf path separately would cost one target pass per path, destroying the whole economy.
+
+The trick that saves it: **one forward pass can verify the entire tree.**
+
+## Tree Attention
+
+Flatten the tree into one sequence, appended after the context in any parent-before-child order. A vanilla causal mask would be wrong — it would let "is" attend to "sat", a *sibling* from a contradictory future. Instead, build a mask straight from the tree structure:
+
+> position $v$ may attend to: the context, $v$'s root-path ancestors, and $v$ itself. Nothing else.
+
+Under this mask, the single forward pass computes, at every node $v$ *simultaneously*, exactly $p(\cdot \mid \text{context}, \text{path}(v))$ — the same distribution a separate pass over that branch would have produced. Eight nodes, eight honest conditional distributions, one pass. (Position IDs follow depth, not flattened order, so each branch also *looks* contiguous to the model.)
+
+<TreeVerifyViz client:only="react" />
+
+<div class="viz-caption">
+**What it models.** An 8-node draft tree after the context "…cat" (left) and its tree-attention mask (right). Each node carries the drafter's confidence q. Hovering a node lights up its mask row: the only filled cells are the context, its ancestors, and the diagonal — siblings are structurally invisible to each other.
+
+**Try this.** Hover "mat" and note its row attends to sat → on → the but not to "is"/"ran"/"there" — one row of the matrix *is* the chain draft for that branch. Then press **Run verification** a few times: the walk descends level by level, keeping the first child that clears its acceptance coin, and every rejection kills a whole gray subtree. Some runs harvest the full sat–on–the–mat spine (+1 bonus token); some die at the root and still emit 1 correction token. The E[tokens/pass] chip is the sum of path products — the exact quantity EAGLE-2 will later optimize the tree *for*.
+</div>
+
+## Accepting on a Tree
+
+Verification walks the tree top-down. At the current node, try its candidate children one at a time with the [acceptance rule](../rejection-sampling/); the first child to pass becomes the path, and the walk descends. If **every** candidate at a level is rejected, the walk stops — and the verify pass's distribution at that node supplies a replacement token, exactly as in the chain case; a walk that reaches a leaf earns the bonus token instead. Either way the output is once again between $1$ and $\text{depth}+1$ tokens for one target pass.
+
+One subtlety keeps multi-candidate acceptance lossless: after a sibling is rejected, the next sibling must be judged against the **residual** distribution (target minus the mass already ruled out), not against raw $p$ — otherwise rejected mass would be double-counted. This is the chain-case resampling rule applied *within* a level; SpecInfer and Medusa formalize it as multi-candidate / typical verification, and every tree-based system since inherits it.
+
+## The Cost Side
+
+A tree with $N$ nodes makes the target verify $N$ positions. In the memory-bound regime that is still roughly one pass's wall-clock — the same asymmetry as chapter 1, exploited harder: for one pass you now hold a *portfolio* of futures instead of one bet. The accounting shows up elsewhere:
+
+- **Compute and batch capacity** scale with $N$ — under serving load, tree width is spending someone's tokens ([the DSpark problem](../../03-parallel-drafting/dspark/), again).
+- **KV cache**: the verify pass writes KV entries for all $N$ nodes; after acceptance, everything off the surviving path is rolled back. The accepted path's KV is already computed — free.
+- **Diminishing returns**: a node's expected contribution is its *path product*. Deep nodes under shaky ancestors are nearly worthless, and siblings past the second candidate rarely pay their way. Choosing *which* $N$ nodes — spending the budget where acceptance mass actually lives — is precisely [EAGLE-2's dynamic tree](../../02-eagle/dynamic-trees/) problem.
+
+:::caution[Common misconception: "The tree tokens are generated together, so they can share information."]
+They must not, and the mask is what forbids it. If sibling branches could attend to each other, each node's distribution would be conditioned on futures that contradict its own branch, and the verified quantity would no longer equal $p(\cdot \mid \text{context}, \text{path})$ — losslessness would silently break. Tree attention is not an optimization; it is the *correctness condition* for verifying alternatives in one pass.
+:::
+
+## References
+
+- Miao et al. *SpecInfer: Accelerating Generative LLM Serving with Tree-based Speculative Inference and Verification.* ASPLOS 2024. [arXiv:2305.09781](https://arxiv.org/abs/2305.09781)
+- Cai et al. *Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads.* ICML 2024. [arXiv:2401.10774](https://arxiv.org/abs/2401.10774)
+- Li et al. *EAGLE* (static draft trees + tree attention in feature-space drafting). [arXiv:2401.15077](https://arxiv.org/abs/2401.15077)

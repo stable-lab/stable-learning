@@ -1,0 +1,41 @@
+---
+title: "EAGLE-3: The Training-Time Test"
+description: Drop the feature loss, fuse the layers, and unlock data scaling
+sidebar:
+  order: 2
+---
+
+By 2025 the EAGLE recipe had a strange problem: **more training data stopped helping.** Scale the draft head's corpus 10× and the speedup barely moved. For a field trained on scaling laws, a flat curve is a symptom — something in the objective was capping what the head could learn. EAGLE-3 found two caps and removed both.
+
+## Cap 1: The Feature-Regression Leash
+
+EAGLE-1/2 train the head to *reproduce the target's next feature* (an L1/MSE regression), then decode tokens from it. That loss is what let a single layer punch above its weight — but it is also a leash: the head is graded on imitating one specific vector, not on the thing we actually care about (drafting acceptable tokens). Once the head saturates the regression, extra data has nowhere to go.
+
+EAGLE-3 **drops feature regression entirely** and trains on token prediction alone. But that creates a new problem: at inference the head runs autoregressively on its *own* predicted features for steps 2, 3, 4 — features that no longer live on the target's manifold, since nothing anchors them there anymore. Trained only on step-1 (teacher-forced on true target features), the head would face inputs at test time it never saw in training.
+
+The fix is the paper's namesake — the **training-time test**: during training, *simulate the drafting rollout*. The head consumes its own step-1 output to predict step 2, its step-2 output to predict step 3, and the loss is applied at every simulated depth. Exposure bias in feature space is eliminated by never letting training and inference differ. (Readers of the [RL track](../../../rl/04-policy-gradient/) will recognize the shape of this fix: when a model consumes its own outputs, train it under its own distribution.)
+
+## Cap 2: Top-Layer Features Are Already Spent
+
+The second-to-top feature is optimized to be *one linear map away from next-token logits* — it is the model's conclusion, with the deliberation discarded. Lexical detail, syntax, mid-level semantics have been compressed out. Fine for predicting token $t+1$; thin evidence for guessing $t+2, t+3, t+4$.
+
+EAGLE-3 instead **fuses features from low, middle, and high layers** of the target (concatenated, then projected) as the head's input. The drafter stops reading the target's answer and starts reading its working.
+
+## What Scaling Unlocks
+
+With both caps removed, the missing scaling law appears: draft-head speedup now **grows steadily with training data**, and the head can be trained on large synthetic corpora. Reported results: up to **6.5×** end-to-end (typically 4–6× on 70B-class models), acceptance lengths pushing 6–8 tokens per pass, and roughly **1.4× over EAGLE-2** at equal cost. The architecture shipped into production serving stacks (SGLang, vLLM, TensorRT-LLM) almost immediately — when a later system claims "2.5× over EAGLE-3," as the next chapter's DFlash does, it is measuring against this deployed baseline.
+
+## The Line So Far
+
+| | Draft substrate | Tree | Objective | Typical speedup |
+|---|---|---|---|---|
+| EAGLE-1 | top feature + sampled token, 1 layer | static shape | feature regression + CE | 2.7–3.5× |
+| EAGLE-2 | same head | **dynamic, confidence-priced** | same | 3.1–4.3× |
+| EAGLE-3 | **multi-layer fusion**, 1–5 layers | dynamic | **token CE under simulated rollout** | 4–6.5× |
+
+Every row keeps the same contract: target frozen, verification lossless, α pushed higher. What none of them change is that drafting is still **sequential** — γ tokens cost γ head passes, and deep trees cost latency. That is the wall the [next chapter](../../03-parallel-drafting/) breaks.
+
+## References
+
+- Li et al. *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test.* NeurIPS 2025. [arXiv:2503.01840](https://arxiv.org/abs/2503.01840)
+- Official implementation: [SafeAILab/EAGLE](https://github.com/SafeAILab/EAGLE)

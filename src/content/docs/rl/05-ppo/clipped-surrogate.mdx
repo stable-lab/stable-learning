@@ -46,6 +46,33 @@ Adjust $\epsilon$ and toggle the advantage sign to see how the clipping region c
 - The clipping is **asymmetric** depending on the sign of the advantage
 :::
 
+## Worked Example: One PPO Update Step
+
+Suppose at a single timestep we have:
+- $\pi_{\theta_\text{old}}(a \mid s) = 0.20$
+- $\hat{A}_t = +1.5$ (good action)
+- $\epsilon = 0.2$
+
+Consider three candidate post-update probabilities $\pi_\theta(a \mid s)$:
+
+| $\pi_\theta$ | $r_t = \pi_\theta / \pi_\text{old}$ | Inside trust region? | $L^{CLIP}$ contribution |
+|--------------|-------------------------------------|----------------------|-------------------------|
+| 0.22 | 1.10 | yes (1 − ε = 0.8, 1 + ε = 1.2) | $1.10 \cdot 1.5 = 1.65$ |
+| 0.26 | 1.30 | **no, clipped to 1.20** | $\min(1.30 \cdot 1.5,\, 1.20 \cdot 1.5) = 1.80$ |
+| 0.40 | 2.00 | clipped to 1.20 | $\min(2.00 \cdot 1.5,\, 1.20 \cdot 1.5) = 1.80$ |
+
+Notice the contribution **stops growing** at $r_t = 1.20$. The gradient with respect to $\theta$ at that point is zero — pushing $\pi_\theta$ from 0.26 to 0.40 buys exactly zero more reward in the objective. That is the trust-region effect made concrete.
+
+Now flip the advantage. With $\hat{A}_t = -1.5$ (bad action) the clip activates on the *low* side:
+
+| $\pi_\theta$ | $r_t$ | $L^{CLIP}$ contribution |
+|--------------|-------|-------------------------|
+| 0.18 | 0.90 | $0.90 \cdot (-1.5) = -1.35$ |
+| 0.14 | 0.70 | $\min(0.70 \cdot -1.5,\, 0.80 \cdot -1.5) = \min(-1.05, -1.20) = -1.20$ |
+| 0.05 | 0.25 | $\min(0.25 \cdot -1.5,\, 0.80 \cdot -1.5) = -1.20$ |
+
+For a *bad* action the $\min$ takes the **more negative** number, so the clip prevents extreme down-weighting from over-rewarding the loss. Either way, $\pi_\theta$ stays inside $[0.16, 0.24]$ (i.e. within $\pm 20\%$ of $\pi_\text{old} = 0.20$) before clipping kicks in.
+
 ## Choosing $\epsilon$
 
 | $\epsilon$ | Effect |
@@ -55,3 +82,6 @@ Adjust $\epsilon$ and toggle the advantage sign to see how the clipping region c
 | 0.3 | More aggressive — faster but riskier |
 
 In practice, $\epsilon = 0.2$ works well across many tasks, including RLHF for language models.
+## References
+
+- Schulman et al. *Proximal Policy Optimization Algorithms.* 2017, §3. [arXiv:1707.06347](https://arxiv.org/abs/1707.06347)

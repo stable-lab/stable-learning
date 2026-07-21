@@ -21,6 +21,8 @@ export default defineConfig({
 				Footer: './src/components/starlight/Footer.astro',
 			},
 			customCss: [
+				'@fontsource-variable/inter',
+				'@fontsource-variable/newsreader',
 				'./src/styles/custom.css',
 				'katex/dist/katex.min.css',
 			],
@@ -29,9 +31,19 @@ export default defineConfig({
 					label: 'Reinforcement Learning',
 					items: [
 						{ label: 'Action Chain & Rewards', autogenerate: { directory: 'rl/01-action-chain-rewards' } },
-						{ label: 'Policy Gradient', autogenerate: { directory: 'rl/02-policy-gradient' } },
-						{ label: 'PPO', autogenerate: { directory: 'rl/03-ppo' } },
-						{ label: 'GRPO', autogenerate: { directory: 'rl/04-grpo' } },
+						{ label: 'Value-Based Methods', autogenerate: { directory: 'rl/02-value-based' } },
+						{ label: 'Monte Carlo Tree Search', autogenerate: { directory: 'rl/03-mcts' } },
+						{ label: 'Policy Gradient', autogenerate: { directory: 'rl/04-policy-gradient' } },
+						{ label: 'PPO', autogenerate: { directory: 'rl/05-ppo' } },
+						{ label: 'GRPO', autogenerate: { directory: 'rl/06-grpo' } },
+					],
+				},
+				{
+					label: 'Speculative Decoding',
+					items: [
+						{ label: 'Fundamentals', autogenerate: { directory: 'specdec/01-fundamentals' } },
+						{ label: 'The EAGLE Line', autogenerate: { directory: 'specdec/02-eagle' } },
+						{ label: 'Parallel Drafting', autogenerate: { directory: 'specdec/03-parallel-drafting' } },
 					],
 				},
 				{

@@ -1,31 +1,350 @@
-/* Wider content area for visualizations */
+/* ============================================================================
+   Theme: warm-paper editorial look.
+   Light mode is a cream "paper" palette with near-black warm ink; dark mode
+   is a warm charcoal (not the default cool blue-gray). Accent is a deep teal.
+   Starlight token semantics: --sl-color-white is the TEXT color and
+   --sl-color-black is the page BACKGROUND (they flip meaning per theme).
+   ========================================================================== */
+
+/* Dark theme (default) */
 :root {
-  --sl-content-width: 50rem;
-  scroll-padding-top: 80px;
-
-  @media only screen and (max-width: 768px) {
-    scroll-padding-top: 64px;
-  }
+	--sl-color-accent-low: #14332f;
+	--sl-color-accent: #2fa79a;
+	--sl-color-accent-high: #bfe7e1;
+	--sl-color-white: #f3efe7;
+	--sl-color-gray-1: #ddd7cb;
+	--sl-color-gray-2: #b8b1a3;
+	--sl-color-gray-3: #8f887b;
+	--sl-color-gray-4: #575247;
+	--sl-color-gray-5: #37332b;
+	--sl-color-gray-6: #211e19;
+	--sl-color-black: #171512;
+	--card-bg: #1d1a16;
+	--card-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
 }
 
-/* Plotly chart containers */
+/* Light theme (warm paper) */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d9e9e6;
+	--sl-color-accent: #176b64;
+	--sl-color-accent-high: #0d4a44;
+	--sl-color-white: #1d1913;
+	--sl-color-gray-1: #2b2620;
+	--sl-color-gray-2: #453f36;
+	--sl-color-gray-3: #6d6860;
+	--sl-color-gray-4: #8d8577;
+	--sl-color-gray-5: #ddd4c5;
+	--sl-color-gray-6: #f1ece1;
+	--sl-color-gray-7: #f6f2e8;
+	--sl-color-black: #f9f6ef;
+	--card-bg: #fffdf8;
+	--card-shadow: 0 10px 34px rgba(32, 28, 20, 0.07);
+}
+
+/* ============================================================================
+   Typography: Inter for UI and annotations, Newsreader (serif) for prose.
+   ========================================================================== */
+:root {
+	--sl-font: 'Inter Variable';
+	--serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+	--sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+	/* Wider content area for visualizations */
+	--sl-content-width: 50rem;
+	scroll-padding-top: 80px;
+
+	@media only screen and (max-width: 768px) {
+		scroll-padding-top: 64px;
+	}
+}
+
+/* Prose in serif */
+.sl-markdown-content {
+	font-family: var(--serif);
+	font-size: 1.08rem;
+	line-height: 1.7;
+}
+.sl-markdown-content strong {
+	font-weight: 650;
+}
+
+/* Headings in serif, slightly tightened */
+.content-panel h1,
+.sl-markdown-content :is(h1, h2, h3, h4, h5) {
+	font-family: var(--serif);
+	font-weight: 550;
+	letter-spacing: -0.015em;
+}
+.sl-markdown-content h2 {
+	margin-top: 2.1em;
+}
+
+/* Annotation voice (sans) for data-ish surfaces inside prose */
+.sl-markdown-content table,
+.starlight-aside {
+	font-family: var(--sans);
+	font-size: 0.93rem;
+	line-height: 1.55;
+}
+.starlight-aside {
+	border-radius: 0 10px 10px 0;
+}
+.sl-markdown-content code,
+.sl-markdown-content kbd {
+	font-family: var(--sl-font-system-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+/* Site title in serif */
+.site-title {
+	font-family: var(--serif);
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+/* Tables: warm hairlines, comfortable cells */
+.sl-markdown-content table {
+	border-collapse: collapse;
+}
+.sl-markdown-content :is(th, td) {
+	border: 1px solid var(--sl-color-gray-5);
+	padding: 0.45rem 0.7rem;
+}
+.sl-markdown-content thead th {
+	background: var(--sl-color-gray-6);
+}
+
+/* Display math breathing room */
+.katex-display {
+	margin: 1.35em 0 1.5em;
+}
+.sl-markdown-content .katex {
+	font-size: 1.05em;
+}
+
+/* ============================================================================
+   Plotly chart containers.
+   The container establishes a new block formatting context so that the
+   first child's top margin and the last child's bottom margin do not
+   collapse with surrounding content. Without that, headings or paragraphs
+   above could pull the first child upward and make it sit visually above
+   the padding edge — which was the reported "upward offset" issue.
+   ========================================================================== */
 .plotly-viz {
-  margin: 1.5rem 0;
-  padding: 1rem;
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 0.5rem;
-  background: var(--sl-color-bg);
+	margin: 1.5rem 0;
+	padding: 1rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 10px;
+	background: var(--card-bg);
+	box-shadow: var(--card-shadow);
+	font-family: var(--sans);
+	display: flow-root; /* block formatting context */
 }
 
+/* Belt-and-braces: also explicitly zero first/last child margins. */
+.plotly-viz > *:first-child {
+	margin-top: 0 !important;
+}
+.plotly-viz > *:last-child {
+	margin-bottom: 0 !important;
+}
+
+/* Starlight's markdown sibling-spacing rule (`* + *: margin-top: 1rem`)
+   reaches inside widget markup: in any internal flex/grid row, every item
+   after the first is pushed down by 1rem, so the first box appears to sit
+   higher (Step button in QLearningGrid, s0 in BellmanBackup, …). Widgets
+   manage their own spacing (inline styles / gap), so neutralize it here.
+   Specificity (0,2,0) beats Starlight's (0,1,2); inline styles still win. */
+.sl-markdown-content :is(.plotly-viz, .viz-sim) * + * {
+	margin-top: 0;
+}
+
+/* Reasonable label default. Don't force display:flex (that broke stacked
+   text+input controls in the newer components) and don't impose a global
+   input width — let each component decide. */
 .plotly-viz label {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.9rem;
+	margin: 0 0 0.5rem;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	min-width: 0;
 }
 
-.plotly-viz input[type="range"] {
-  flex: 1;
-  max-width: 300px;
+/* Live-simulation widgets ---------------------------------------------------
+   Shared design tokens: one color = one meaning, across every RL widget. */
+:root {
+	--viz-policy: #3b82f6; /* the thing being learned */
+	--viz-value: #f59e0b; /* value function / critic / baseline */
+	--viz-reward: #22c55e; /* reward, return curves */
+	--viz-danger: #ef4444; /* variance, collapse, clipped-out region */
+	--viz-ref: #94a3b8; /* old / reference policy, neutral guides */
+	--viz-kl: #a855f7; /* KL, regularization */
+}
+
+.viz-sim {
+	margin: 1.5rem 0;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 10px;
+	background: var(--card-bg);
+	box-shadow: var(--card-shadow);
+	font-family: var(--sans);
+	padding: 0.75rem 0.9rem 0.9rem;
+	display: flow-root;
+}
+
+.viz-sim-header {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+	margin-bottom: 0.6rem;
+}
+
+.viz-sim-title {
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--sl-color-gray-2);
+}
+
+.viz-sim-spacer {
+	flex: 1;
+}
+
+.viz-btn {
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.35rem;
+	background: var(--card-bg);
+	color: var(--sl-color-text);
+	font-family: var(--sans);
+	font-size: 0.8rem;
+	padding: 0.28rem 0.65rem;
+	cursor: pointer;
+	line-height: 1.2;
+}
+.viz-btn:hover:not(:disabled) {
+	border-color: var(--sl-color-gray-3);
+}
+.viz-btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.viz-btn-primary {
+	background: var(--sl-color-accent);
+	border-color: var(--sl-color-accent);
+	color: var(--sl-color-black);
+	font-weight: 600;
+	min-width: 5.2rem;
+}
+.viz-btn-primary:hover:not(:disabled) {
+	filter: brightness(1.08);
+	border-color: var(--sl-color-accent);
+}
+
+.viz-speed {
+	display: inline-flex;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.35rem;
+	overflow: hidden;
+}
+.viz-speed-btn {
+	border: none;
+	background: var(--card-bg);
+	color: var(--sl-color-gray-2);
+	font-family: var(--sans);
+	font-size: 0.75rem;
+	padding: 0.28rem 0.55rem;
+	cursor: pointer;
+}
+.viz-speed-btn.active {
+	background: var(--sl-color-gray-5);
+	color: var(--sl-color-text);
+	font-weight: 600;
+}
+
+.viz-readouts {
+	display: flex;
+	gap: 0.45rem;
+	flex-wrap: wrap;
+	margin-bottom: 0.6rem;
+}
+
+.viz-chip {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.35rem;
+	background: var(--sl-color-gray-6);
+	border-radius: 0.35rem;
+	padding: 0.22rem 0.55rem;
+	font-size: 0.78rem;
+}
+.viz-chip-label {
+	color: var(--sl-color-gray-3);
+}
+.viz-chip-value {
+	font-family: var(--sl-font-system-mono, ui-monospace, monospace);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.viz-slider {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	font-size: 0.8rem;
+	min-width: 0;
+}
+.viz-slider input[type='range'] {
+	width: 100%;
+	margin: 0;
+	accent-color: var(--sl-color-accent);
+}
+.viz-slider .viz-slider-value {
+	font-family: var(--sl-font-system-mono, ui-monospace, monospace);
+	font-weight: 600;
+}
+
+@keyframes viz-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+.viz-fade-in {
+	animation: viz-fade-in 0.28s ease-out backwards;
+}
+
+@keyframes viz-pulse {
+	0%,
+	100% {
+		opacity: 0.4;
+	}
+	50% {
+		opacity: 0.95;
+	}
+}
+.viz-pulse {
+	animation: viz-pulse 1.1s ease-in-out infinite;
+}
+
+/* Structured figure captions (What it models / Knobs / Try this) */
+.viz-caption {
+	margin: -0.75rem 0 1.75rem;
+	font-family: var(--sans);
+	font-size: 0.85rem;
+	line-height: 1.55;
+	color: var(--sl-color-gray-2);
+	border-left: 2px solid var(--sl-color-gray-5);
+	padding-left: 0.9rem;
+}
+.viz-caption p {
+	margin: 0.35rem 0 0 !important;
+}
+.viz-caption strong {
+	color: var(--sl-color-text);
+	font-weight: 600;
 }

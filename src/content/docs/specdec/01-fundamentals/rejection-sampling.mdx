@@ -1,0 +1,77 @@
+---
+title: The Lossless Acceptance Rule
+description: Why speculative decoding changes nothing about the output distribution
+sidebar:
+  order: 1
+---
+
+import RejectionSampler from '../../../../components/visualizations/RejectionSampler';
+
+The entire field rests on a two-line rule. A draft token $x$ was sampled from the wrong distribution $q$, and we want output distributed as $p$. The fix:
+
+$$
+\text{accept } x \text{ with probability } \min\!\left(1, \frac{p(x)}{q(x)}\right),
+\qquad
+\text{on rejection, resample } y \sim \frac{\max(0,\, p - q)}{\sum_t \max(0,\, p(t) - q(t))}
+$$
+
+Accept where the draft *under*-proposes relative to $p$ (ratio ≥ 1 ⇒ always keep); thin out where it *over*-proposes; and patch the holes by resampling from exactly the part of $p$ the draft under-covers — the **residual**.
+
+## The Proof (four lines)
+
+For any token $t$, the probability it ends up as output is *accepted-as-$t$* plus *resampled-as-$t$*:
+
+$$
+P(\text{out} = t) = \underbrace{q(t)\min\!\left(1, \tfrac{p(t)}{q(t)}\right)}_{\min(p(t),\, q(t))} \;+\; P(\text{reject}) \cdot \frac{p(t) - \min(p(t), q(t))}{\sum_s p(s) - \min(p(s), q(s))}
+$$
+
+The total rejection probability is $1 - \sum_s \min(p(s), q(s))$, which is exactly the residual's normalizer. It cancels:
+
+$$
+P(\text{out} = t) = \min(p(t), q(t)) + \big(p(t) - \min(p(t), q(t))\big) = p(t) \qquad \blacksquare
+$$
+
+No approximation, no temperature caveat. The draft's quality appears **nowhere** in the result — it only sets how *often* we accept:
+
+$$
+P(\text{accept}) = \sum_t \min(p(t), q(t)) = 1 - \mathrm{TV}(p, q)
+$$
+
+Draft quality is overlap with the target distribution — measured in total variation, not in accuracy.
+
+## Worked Example
+
+Vocabulary $\{$a, b, c$\}$, target $p = (0.5, 0.3, 0.2)$, draft $q = (0.2, 0.2, 0.6)$:
+
+| token | $p$ | $q$ | $\min(1, p/q)$ | kept mass $\min(p,q)$ | residual $\propto \max(0, p-q)$ |
+|-------|-----|-----|----------------|----------------------|--------------------------------|
+| a | 0.5 | 0.2 | 1 (accept always) | 0.20 | 0.30 → **0.75** |
+| b | 0.3 | 0.2 | 1 (accept always) | 0.20 | 0.10 → **0.25** |
+| c | 0.2 | 0.6 | 1/3 | 0.20 | 0 |
+
+Acceptance rate $= 0.20 + 0.20 + 0.20 = 0.6$. The draft loves "c" ($0.6$ vs the target's $0.2$), so two of every three drafted "c"s are rejected; every rejection resamples "a" or "b" at ratio 3:1 — precisely the mass the draft under-covered. Add it up per token and you recover $(0.5, 0.3, 0.2)$ exactly.
+
+## See It Converge
+
+<RejectionSampler client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Green bars are the target $p$, gray bars the draft $q$ (the *mismatch* slider drags $q$ away from $p$), blue bars the empirical distribution of what the rule actually outputs. At 1× every draw is narrated: the ratio, the verdict, and the residual resample on rejection.
+
+**Knobs.** Mismatch controls how wrong the draft is; the red toggle switches to *naive* mode, which keeps every draft sample.
+
+**Try this.** Set mismatch to 1.0 (a terrible draft), run at 500×, and watch TV(empirical, p) fall toward zero anyway — only the *acceptance* chip suffers, converging to Σmin(p, q). Then flip to naive mode: TV plateaus at a visibly nonzero bias, because you are now just sampling from q. Correctness never depended on the draft; only speed did.
+</div>
+
+## Multi-Token Drafts
+
+For a $\gamma$-token draft the rule applies **per position, in order**: position $i$ is judged against $p(\cdot \mid \text{prefix}, x_1, \ldots, x_{i-1})$ — a distribution the single verify pass already produced for every $i$. The first rejection invalidates everything after it (those drafts were conditioned on a token that no longer exists), which is why acceptance decays along the draft — the effect that drives draft-length tuning on the [next page](../speedup-model/) and, much later, DSpark's variable-length verification.
+
+:::caution[Common misconception: "The draft token is accepted if it matches the target's top choice."]
+Top-1 matching is a *lossy* shortcut that silently turns sampling into greedy decoding. The real rule compares full distributions and preserves sampling at any temperature — a draft token can be accepted even when it is *not* the target's argmax, as long as the ratio clears the coin flip. And rejection costs no extra target pass: the resampling distribution is built from logits the verify pass already computed.
+:::
+
+## References
+
+- Leviathan, Kalman, Matias. *Fast Inference from Transformers via Speculative Decoding.* ICML 2023. [arXiv:2211.17192](https://arxiv.org/abs/2211.17192)
+- Chen et al. *Accelerating Large Language Model Decoding with Speculative Sampling.* [arXiv:2302.01318](https://arxiv.org/abs/2302.01318)
