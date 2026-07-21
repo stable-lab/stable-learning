@@ -1,12 +1,15 @@
 ---
 import Default from '@astrojs/starlight/components/Footer.astro';
+// Imported through the asset pipeline so the URL always carries the site
+// base — string-concatenating BASE_URL dropped the slash and 404'd on Pages.
+import logo from '../../assets/stable-logo.jpeg';
 ---
 
 <Default {...Astro.props}><slot /></Default>
 
 <footer class="site-footer">
   <div class="footer-content">
-    <img src={`${import.meta.env.BASE_URL}stable-logo.jpeg`} alt="Stable Lab" class="footer-logo" />
+    <img src={logo.src} alt="Stable Lab" class="footer-logo" />
     <p>&copy; {new Date().getFullYear()} Stable Lab. All rights reserved.</p>
   </div>
 </footer>
