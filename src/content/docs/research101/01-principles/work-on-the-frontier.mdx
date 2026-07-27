@@ -1,0 +1,60 @@
+---
+title: Work on the Frontier
+description: Why is this worth doing, and why is it hard? If you cannot answer both, stop.
+sidebar:
+  order: 1
+---
+
+import FrontierMap from '../../../../components/visualizations/FrontierMap';
+
+The most common way research time dies is not on hard problems. It dies on easy ones dressed up to look hard. You pick a comfortable corner of a field, you stack up clever tricks, you run ablations, you tune, you write — and eighteen months later you have a paper that is technically correct, mildly novel, and needed by no one. The days were full. The calendar was brutal. Every week produced *something*. And the sum of it all is a contribution the field would have reached without you, or never needed at all. **Busy is not the same as being at the frontier** — it is what the frontier's absence feels like from the inside, because well-trodden territory always offers more to do, not less: more baselines to beat by half a point, more variants to try, more knobs.
+
+Matt Might draws a PhD as a circle: everything humanity knows is a disk, and your doctorate is the act of pushing on its boundary until you leave a dent. The picture is right but static, and the static version hides the failure mode. The boundary *moves*. Other groups are pushing on it every week, whether you are anywhere near it or not. Work done in the interior — however ingenious, however exhausting — lands inside what is already known and is quietly absorbed. Watch it happen:
+
+<FrontierMap client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Matt Might's circle of knowledge, with the dynamic the drawing leaves out: the boundary moves. The gray blob is everything already known in your field; gray pulses are other groups' results landing on the edge and permanently pushing it outward. The blue dot is you. Papers you write in the interior land inside the disk and fade to gray — absorbed, contribution zero. Papers written at the edge dent the boundary outward in blue: the only work that changes the map.
+
+**Knobs.** One slider — where your months go. At 1.0 you grind tricks on familiar ground: maximum paper output, zero motion toward the edge. At 0.0 you spend the months reading and working at the boundary: fewer papers, but you close the gap and eventually track the edge as it moves.
+
+**Try this.** Park the slider at 1.0 and run for 30 simulated months. You are extremely busy — *papers inside the known* ticks up steadily — while *frontier pushed* stays exactly zero and *distance to frontier* climbs in red, because everyone else keeps expanding the disk away from you. Then drag to 0.0: papers nearly stop, the distance line plunges, and when the dot finally reaches the edge, your next paper leaves the first blue dent. Notice which counter you were optimizing before.
+</div>
+
+## Two Questions Before You Start
+
+Before you commit a single week to a project, answer two questions, out loud, in one sentence each: **why is this worth doing, and why is it hard?** If you cannot answer both crisply, stop — not "keep it warm on the side," stop.
+
+The two questions factor cleanly. A problem that is worth doing but not hard is engineering: valuable, but someone will do it next quarter whether you exist or not, and probably with more GPUs. A problem that is hard but not worth doing is a puzzle: it will consume exactly as much of your life as you feed it and return prestige to no one. **Research lives only at the intersection** — hard *and* worth doing — and that intersection is, by construction, at the boundary of what is known. Uri Alon draws the same map with axes of feasibility and interest, and his warning is the one new students most need: the corner that attracts you by default is high-feasibility, low-interest — problems you already know how to solve. That corner is the interior of the disk.
+
+Hamming asked his Bell Labs lunch companions the same thing more bluntly: *what are the important problems of your field, and why are you not working on them?* He watched brilliant people spend whole careers on safe problems and produce safe, forgettable work. The uncomfortable part of his argument is that this is a choice, made daily, and mostly made by not asking.
+
+:::caution[The trap is not laziness]
+This particular waste does not come from slacking — that failure mode gets its own chapter. It comes from working *hard* on the wrong ground — because interior problems are more comfortable precisely where frontier problems are painful: the literature is settled, the baselines run, progress arrives on schedule. If your project has felt smooth for three straight months, that is not a sign you are talented. It is a sign you should check the map.
+:::
+
+So make the check a habit. Every time you sit down to a project — and again every few weeks while it runs — ask:
+
+**The Frontier Test.** *Why is this worth doing, and why is it hard? Am I at the boundary of what is known, or decorating the interior?*
+
+## Reading Is Navigation
+
+The Frontier Test has a companion question, and you must ask it just as often: *have I read enough of the current frontier to know where the boundary actually is?* You cannot answer from memory, because the boundary you remember is not the boundary that exists. It moved last week. It will move again this week. The only way to know where the edge is, is to keep looking at it — which means **reading at the frontier is not procrastination; it is navigation**. A student who "protects research time" by not reading is a ship protecting sailing time by throwing out the charts.
+
+Three habits, concretely:
+
+- **Track the releases in your area** — the daily arXiv listings for your subfield, and the labs and groups whose output defines it. Skimming titles and abstracts for fifteen minutes a day is enough to feel the boundary move.
+- **Read the newest strong papers first.** Classics teach you the interior; the papers from the last six months tell you where the edge is *now*, which is the only place your work can land.
+- **For every project, write one sentence for "why now."** What changed — a capability, a result, a bottleneck — that makes this problem newly attackable or newly urgent? If nothing changed, the problem was either always doable (someone's engineering backlog) or is still not doable (a puzzle on a shelf).
+
+Schulman's guide makes the same point from the working researcher's side: strong problem choice comes from a continuously maintained view of the field's open questions, and goal-driven researchers keep a running list of them. Nielsen adds the distinction this whole page turns on — being a good problem *solver* is not enough; the rarer and more valuable skill is problem *selection*, and selection is exactly the skill that reading at the edge trains.
+
+Being at the frontier is necessary, but it is not sufficient. Some parts of the boundary are growing and some are quietly dying — the next principle, [Bet on What Scales](../bet-on-what-scales/), is how to tell them apart. And the boundary does not wait while you decide: [Research Is a Race](../research-is-a-race/).
+
+## References
+
+- Richard Hamming. *You and Your Research.* Talk at Bell Communications Research, Morristown NJ, March 7, 1986. [Transcript](https://www.cs.virginia.edu/~robins/YouAndYourResearch.html)
+- Matt Might. *The Illustrated Guide to a Ph.D.* [matt.might.net](https://matt.might.net/articles/phd-school-in-pictures/)
+- Uri Alon. *How To Choose a Good Scientific Problem.* Molecular Cell 35(6), 726–728, 2009. [Cell Press](https://www.cell.com/fulltext/S1097-2765%2809%2900641-8)
+- John Schulman. *An Opinionated Guide to ML Research.* Written December 2017; published January 2020. [joschu.net/blog/opinionated-guide-ml-research.html](http://joschu.net/blog/opinionated-guide-ml-research.html)
+- Michael Nielsen. *Principles of Effective Research.* 2004. [michaelnielsen.org](https://michaelnielsen.org/blog/principles-of-effective-research/)

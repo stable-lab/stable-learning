@@ -1,0 +1,68 @@
+---
+title: Research Is a Race
+description: Good problems expire. Priority rewards first place only — bring 100% motivation and 200% effort, and rest after the paper ships.
+sidebar:
+  order: 3
+---
+
+import PriorityRace from '../../../../components/visualizations/PriorityRace';
+
+Here is how you lose in research. Not in one dramatic moment — in slow motion. You have a genuinely good idea. You work on it at a comfortable pace: a solid week, then a slow one, a conference trip, a break to recharge. Eight months in, an arXiv alert lands in your inbox and there it is — your idea, with someone else's name on it, their repository where yours would have been, their plots making the argument you had been saving for the intro. Nothing was wrong with your idea. Everything was wrong with your clock.
+
+Then comes the part nobody warns you about, because it is worse than the scoop itself: the resubmission spiral. You recycle the paper and reposition it against "concurrent work." By the next deadline the state of the art has moved and your numbers look dated; reviewers ask why you didn't compare against the paper that beat you. Another cycle, another repositioning, and all the while a corrosive self-blame — *I had it, I had it first* — burns energy that no longer buys anything. Understand what this feeling actually is: **grief over a race that was lost months earlier**. You just hadn't heard the result yet.
+
+<PriorityRace client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A career of priority races. Several labs (you in blue, rivals in gray) push toward the same publishable result; every lab's pace is stochastic, and each draws fresh per-race luck. The first bar across the line plants a flag — and everyone else's accumulated progress drains away to nothing, because that is what being scooped is: your months, evaporating, salvaged only as ε citations on a "concurrent work" footnote. The winner carries momentum into the next race as a head start, and the races run back to back, accumulating your career statistics.
+
+**Knobs.** *Your effort* scales only your lab's pace — rivals are pinned at 1.0×. *Rival labs* sets how many groups can see the same problem you can. *Take a month off* freezes your bar while the world keeps moving; pressing it again stacks.
+
+**Try this.** Run 20 races at 1.0× effort and read the *months evaporated* counter — that is what parity with the field buys: a roughly 1-in-6 win rate and a pile of vanished work. Push effort to 2× and watch the win rate cross 50% and keep climbing — racing is nonlinear near the top, so a 50% increase in pace buys far more than a 50% increase in wins. Then win a race, notice the head start you carry into the next one, and press *Take a month off* while you are leading. Watch a race that was yours get taken at the line.
+</div>
+
+## Problems Have Expiry Dates
+
+The scoop is not bad luck. It is the default outcome, and the sociology of science has known this for a century. Ogburn and Thomas catalogued 148 major discoveries and inventions made independently by two or more people — calculus by Newton and Leibniz, natural selection by Darwin and Wallace, the telephone filed twice in one day. Merton built on this to argue that **multiple discovery is the norm, not the anomaly**: when a field's tools and open questions mature to the point where a result becomes reachable, it becomes reachable *for everyone at once*. If you can see a good problem, that is evidence that other strong groups — reading the same literature, downloading the same model release — can see it too. The question is never whether you are in a race. It is only whether you know it.
+
+And the race pays out like a race, not like a salary. Hill and Stein studied priority races in structural biology and found that the scooped team's paper is less likely to land in a top journal and collects about 21% fewer citations — a permanent tax for arriving second, levied on work of essentially identical quality. Science does not average the credit between the two groups that finished. It reads the clock.
+
+Now put that machinery in today's environment. arXiv absorbs tens of thousands of new preprints every month, and in the hottest areas — agents above all — the pipeline from "this seems plausible" to a public preprint with a working repo now runs in **weeks**. A problem that was safely yours for a year in 2015 is contested territory for a season, sometimes less. Research challenges are perishable. No one waits for you, and if you do not push hard, your effort simply becomes someone else's paper and someone else's codebase.
+
+## 100% Motivation, 200% Effort
+
+So here is the bar, stated plainly, because you deserve to hear it before your first project rather than after your first scoop: **if you want to do research, bring 100% motivation and 200% effort.** Not because suffering is virtuous — because the payoff structure you just watched in the simulator leaves no prize for a well-rested second place.
+
+Keep your head in the paper continuously. Research momentum compounds: today's half-formed idea becomes tomorrow's experiment only if it is still loaded in your head tomorrow. Every context switch dumps that state, and rebuilding it costs days — which is exactly why one month off in the middle of a race costs far more than a month. Pour your thinking and your energy into the paper at every moment while the window is open.
+
+Rest and vacations are real, necessary, and yours — **after the paper ships**. Schedule them as the reward, deliberately and without guilt, not as an interruption in the middle of the window. This is not a plea for "balance," because the alternative to the sprint is not balance. The alternative is watching your effort become someone else's publication, then paying for it a second time in the resubmission spiral — the recycled manuscript, the moved state of the art, the months of self-blame — which drains far more from you than the sprint ever would have.
+
+:::caution[The regret costs more than the sprint]
+Do not learn this the expensive way. Pausing mid-window does not restore your energy; it converts your months of work into someone else's paper, then bills you again — in resubmissions, in re-run baselines against a moved SOTA, in self-blame that produces nothing. By the time you are recycling a scooped paper and losing the comparison war, the race is long over. The cheapest time to work hard is now.
+:::
+
+## Run the Clock Backwards
+
+The principle turns into practice as three habits:
+
+- **Pick a target date and work backwards.** Choose the deadline the result deserves, then lay out what must be true each week between now and then. A project without a date is a project drifting toward someone else's date.
+- **Ship strong now, not perfect later.** A strong result published inside the window beats a perfect result after it closes, because after it closes the perfect result is a footnote to somebody else's paper. Perfection has a venue: the camera-ready, the journal version, v2.
+- **When a competitor's preprint drops, respond within days — never freeze.** Read it the day it appears. Then do one of three things: *position* (your result stands, cite them and sharpen what only you have), *differentiate* (shift emphasis to the axis they missed), or *fold* (they got it, redirect the remaining months somewhere alive). All three are fine outcomes. The only fatal response is the paralysis of pretending it didn't happen.
+
+## The Clock Test
+
+Before you settle into a working pace — and again every time you feel the temptation to coast — ask:
+
+**The Clock Test.** *If I paused this project for a month, would the result still be mine to publish?*
+
+If the answer is a comfortable yes, be suspicious rather than relieved: a problem no one else is racing toward is usually a problem that fails the [Frontier Test](../work-on-the-frontier/). If the answer is no — good. That discomfort is what the boundary of a live field feels like, and it is telling you exactly one thing: run.
+
+The three tests interlock. The Frontier Test picks a problem worth racing for; the [Scale Test](../bet-on-what-scales/) picks a field where winning still matters in five years; the Clock Test sets the tempo that lets you actually collect. Fail any one of the three and the other two cannot save you.
+
+## References
+
+- Robert K. Merton. *Priorities in Scientific Discovery: A Chapter in the Sociology of Science.* American Sociological Review 22(6): 635–659, 1957. [jstor.org/stable/2089193](https://www.jstor.org/stable/2089193)
+- William F. Ogburn, Dorothy Thomas. *Are Inventions Inevitable? A Note on Social Evolution.* Political Science Quarterly 37(1): 83–98, 1922. [jstor.org/stable/2142320](https://www.jstor.org/stable/2142320)
+- Ryan Hill, Carolyn Stein. *Scooped! Estimating Rewards for Priority in Science.* Journal of Political Economy 133(3), 2025. [doi.org/10.1086/733398](https://doi.org/10.1086/733398)
+- Andrej Karpathy. *A Survival Guide to a PhD.* September 2016. [karpathy.github.io/2016/09/07/phd](https://karpathy.github.io/2016/09/07/phd/)
+- arXiv. *Monthly Submissions.* Live statistics since 1991 — the pace of the field, in one chart. [arxiv.org/stats/monthly_submissions](https://arxiv.org/stats/monthly_submissions)

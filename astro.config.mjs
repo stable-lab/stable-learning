@@ -28,6 +28,12 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
+					label: 'Research 101',
+					items: [
+						{ label: 'How to Do Research', autogenerate: { directory: 'research101/01-principles' } },
+					],
+				},
+				{
 					label: 'Reinforcement Learning',
 					items: [
 						{ label: 'Action Chain & Rewards', autogenerate: { directory: 'rl/01-action-chain-rewards' } },

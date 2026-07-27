@@ -146,6 +146,36 @@ living simulator per chapter, structured captions, references per page.
   2602.06036 + LMSYS "next-generation speculative decoding" post (measured
   acc-len/speedup table); DSpark arXiv 2607.05147 + LMSYS SGLang integration
   post (STS calibration, SPS cost model, verify modes).
+- [ ] ch03 addendum: `mean-field-trap.mdx` + `MeanFieldSampler` — why parallel
+      blocks sample a product of marginals, not the joint: marginalization
+      primer (contingency tables, np/torch multi-modal collision), the
+      CE-objective-learns-the-marginal insight, MTP (DeepSeek-V3, D=1) as the
+      degenerate case, DSpark's first-order Markov head as the cheap fix, and
+      the parallelism-vs-joint-fidelity axis (Medusa/DFlash → MTP → EAGLE →
+      DSpark). Live sampler: watch `np.tensor` mass pile into impossible
+      cells under mean-field, empty out under the Markov head. Slots between
+      the DFlash and DSpark pages (orders 0/1/2).
+
+---
+
+## M6 — New track: Research 101 (how to do research, for new lab members)
+
+One chapter under `research101/01-principles/`, same house style: the PI's
+three principles for new researchers, tension-first prose, a living simulator
+per principle, structured captions, verified references per page.
+
+- [x] Track index `index.mdx` — why problem choice and pace dominate outcomes;
+      the three principles and their tests at a glance.
+- [x] ch. "Work on the Frontier" + `FrontierMap` — Matt Might's circle of
+      knowledge made live: busy-but-interior work vs. pushing the boundary.
+- [x] ch. "Bet on What Scales" + `ScalingRace` — the Bitter Lesson as a race:
+      structure-first method leads early, saturates, gets crossed over as
+      compute doubles; committed years get stranded.
+- [x] ch. "Research Is a Race" + `PriorityRace` — repeated priority races
+      vs. rival labs: effort knob, mid-race pause button, evaporated-months
+      counter.
+- [x] Sidebar group + landing-page card (track listed first — onboarding).
+- Acceptance: `npm run build` clean; both themes OK; references verified.
 
 ---
 

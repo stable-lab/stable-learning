@@ -1,0 +1,66 @@
+---
+title: Bet on What Scales
+description: In a scaling era, a field that cannot absorb compute is not a niche — it is an expiration date
+sidebar:
+  order: 2
+---
+
+import ScalingRace from '../../../../components/visualizations/ScalingRace';
+
+There is a way to lose three years of your life that does not look like failure from the inside. You pick a hot area — hundreds of papers a year, dedicated workshops, its own leaderboards. You work hard. Your experiments are careful, your baselines are honest, your papers get in. And then, quietly, the field's own growth makes the whole area irrelevant. The models got bigger, the general methods got better, and the problem you spent your prime years decorating simply stopped mattering. You did everything right *locally* and still walked away with nothing — because the field itself carried a **fatal flaw: it could not scale**.
+
+The previous chapter, [Work on the Frontier](../work-on-the-frontier/), taught you to ask whether a problem is worth doing and why it is hard. This chapter adds a second, colder filter. A field can pass the Frontier Test today and still be doomed, because frontiers move — and in this era they move in one direction: toward whatever can absorb more compute and more data. Some research programs ride that growth. Others fight it. Watch what happens to the ones that fight it:
+
+<ScalingRace client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Two research programs racing as the world's training compute doubles on a clock (x-axis: log compute, growing as sim years tick by; y-axis: capability). **Red** is clever and structure-first: encoded human insight pays off immediately, so it starts clearly ahead — but it saturates at a hard ceiling, because its core cannot turn more compute into more capability. **Blue** is general and scale-first: behind and noisy at small compute, but linear in log-compute — it never stops climbing. The dashed vertical line marks the crossover ("the field moves on"); the small tick marks are papers landing on each program, and after the crossover they drain off red.
+
+**Knobs.** *Doubling time* sets how fast the era scales (Epoch's estimate for the deep-learning era is roughly six months). *Red's ceiling* is how far cleverness gets before its fatal flaw binds. *Blue's slope* is how much capability each 10× of compute buys the general method.
+
+**Try this.** Commit to red at year 0 — it is winning, and the button will tell you by exactly how much. Run ten years and watch the crossover strand your investment (the readout turns red; blue's curve never notices). Now raise red's ceiling to 90 and run again: the crossover arrives later, but it always arrives — a higher ceiling buys delay, not survival, as long as compute keeps doubling. Finally, reset and set the doubling time to 24 months: the crossover slides out beyond a career horizon, and committing to red becomes a defensible bet. The principle is conditional on the era — which is exactly why, in this era, it is non-negotiable.
+</div>
+
+## Two Post-Mortems
+
+This is not an abstract worry. Our lab's own field of systems-for-ML has produced two textbook cases within recent memory, and I want you to understand them as arguments, not as sneers — both areas attracted brilliant people, and both looked unstoppable at their peak.
+
+**Graph neural networks.** For roughly five years, GNNs were among the biggest waves in machine learning: thousands of papers, every top venue saturated, an entire sub-industry of message-passing variants. But look at the core of the method through a systems lens. Message passing over irregular sparse structure means gather–scatter memory access, unpredictable neighborhoods, and workloads that fight everything GPUs are good at — dense, regular, batched matrix multiplication. Worse, the paradigm never found a scaling recipe: stacking more layers hits oversmoothing, and there was no reliable analogue of "more parameters plus more data equals more capability" that transformers ride. Meanwhile the general architecture came for the territory directly — Graphormer showed a transformer with light structural encodings beating specialized message-passing networks on their own graph benchmarks. At scale, **general architectures plus more data kept winning**, and the once-enormous GNN wave receded to the niche domains where graphs are irreducibly the data. The people who spent 2018–2022 on message-passing variant number forty-seven did careful work inside a paradigm whose ceiling was already visible from the hardware.
+
+**Sparse-attention hardware codesign.** The recipe seemed ideal for a systems researcher: take today's attention sparsity pattern, co-design an accelerator datapath around it, and publish the speedup. The fatal flaw is temporal. Hardware takes years to design and ship; model architectures now mutate in months. Every hand-built attention-pattern/accelerator co-design is a bet that the architectural assumption it is etched around — this sparsity structure, this head layout, this context regime — will still describe frontier models when the silicon exists. It almost never does. **Model evolution invalidates architectural assumptions faster than hardware can ship**, so the co-design's premise decays before its artifact arrives. The approach is not stupid; it is structurally late, every time, by construction.
+
+Different fields, same autopsy: a core mechanism that could not ride the scaling curve, in an era when the scaling curve is the whole game.
+
+## The Bitter Lesson Is a Schedule, Not an Opinion
+
+Rich Sutton named the general pattern in 2019: over seventy years of AI — chess, Go, speech, vision, language — **methods that leverage computation ultimately beat methods that encode human cleverness**, every decade, in every subfield, and researchers relearn this bitterly each time because the clever methods win *first*. That last clause is the trap. In the simulator above, red is genuinely ahead for years; committing to it is the locally rational move at every point before the crossover. The Bitter Lesson is not "structure never works." It is that structure's advantage has an expiration date, and compute's advantage does not.
+
+What is different now is that we can put numbers on the schedule. Capability improves as a smooth, predictable function of scale — that is what the scaling-law papers established — and the compute feeding those laws has been doubling roughly every six months in the deep-learning era. Your rival's curve does not plateau. So when you evaluate a research direction, you are not asking "is this better than the general method today?" You are asking "what does this comparison look like after four more doublings?" — and four more doublings arrive in about two years, whether or not your thesis is finished.
+
+Hence the test this chapter is named for. Before you commit years to a direction, ask:
+
+**The Scale Test.** *If compute, data, and models grow 100x, does my approach matter more — or less?*
+
+Three corollary heuristics, in the order I want you to apply them:
+
+- **Prefer methods whose curves bend up with more compute and data.** If feeding the method 10× resources makes it *more* dominant, you are on the right side of the era. Speculative decoding — one of this lab's own directions — is an example: bigger targets make verification asymmetry *more* valuable, not less.
+- **Be suspicious of any approach whose selling point only exists at small scale.** "We beat the transformer at 100M parameters" is not an advantage; it is a countdown. If the win evaporates when the baseline grows, the baseline will grow.
+- **Ask what happens to this line of work when the base model gets 10x better for free.** For your entire career, the base model *will* keep getting 10x better for free, on someone else's budget. If the honest answer is "my technique becomes unnecessary," you are not doing research — you are fighting a delaying action against your own field's progress.
+
+:::caution[A higher ceiling buys delay, not survival]
+Play with the simulator's ceiling slider and internalize what it shows: making the clever method *better* only delays the crossover, it never prevents it, as long as compute keeps doubling. This is why "but the GNN papers were good" and "but the accelerator was real" are true and irrelevant. In a scaling era, an approach that cannot absorb compute does not get to be a stable niche. It gets a date. If you spend years there anyway, you will discover the specific misery the Chinese internet calls 做了个寂寞 — you worked long and hard and built, in the end, an emptiness.
+:::
+
+## What This Principle Is — and Is Not
+
+Read this carefully, because I am not handing you dogma. This is not a claim that no good work exists in GNNs or in hardware codesign; excellent people still do excellent work in both, and in domains where graphs genuinely are the data, message passing earns its keep. It is a claim about *where a junior researcher should place a multi-year bet in a scaling era*. You do not hold a diversified portfolio. You hold one PhD, with perhaps three prime years in it, and you get to place that bet a very small number of times. A senior researcher with tenure can afford a contrarian position on scaling; you cannot afford to be wrong for five years. So place your years where the era's tailwind blows: on methods, systems, and questions that become *more* important as everything underneath them grows.
+
+And notice what the simulator's doubling-time knob really taught you: the principle is conditional on the era. In a world where compute doubled every two years, red would be a fine life. That is not the world outside your window. Check the Scale Test against the Frontier Test from [the previous chapter](../work-on-the-frontier/) — the best problems pass both — and then read on, because passing both tests still is not enough. Once you have chosen a direction that scales, others will have chosen it too, and the clock starts. That is the next chapter: [Research Is a Race](../research-is-a-race/).
+
+## References
+
+- Rich Sutton. *The Bitter Lesson.* 2019. [incompleteideas.net/IncIdeas/BitterLesson.html](http://www.incompleteideas.net/IncIdeas/BitterLesson.html)
+- Kaplan et al. *Scaling Laws for Neural Language Models.* 2020. [arXiv:2001.08361](https://arxiv.org/abs/2001.08361)
+- Hoffmann et al. *Training Compute-Optimal Large Language Models.* 2022. [arXiv:2203.15556](https://arxiv.org/abs/2203.15556)
+- Sevilla et al. *Compute Trends Across Three Eras of Machine Learning.* IJCNN 2022. [arXiv:2202.05924](https://arxiv.org/abs/2202.05924)
+- Ying et al. *Do Transformers Really Perform Badly for Graph Representation?* NeurIPS 2021. [arXiv:2106.05234](https://arxiv.org/abs/2106.05234)
