@@ -51,6 +51,8 @@ interface Sim {
 	pulses: Pulse[];
 	distHist: number[]; // distance to frontier, in months of work
 	nextSample: number;
+	wigX: number; // busy-jitter offset (screen px): hard at work, going nowhere
+	wigY: number;
 }
 
 const thOf = (k: number) => (2 * Math.PI * k) / K;
@@ -88,6 +90,8 @@ function freshSim(): Sim {
 		pulses: [],
 		distHist: [],
 		nextSample: 0,
+		wigX: 0,
+		wigY: 0,
 	};
 }
 
@@ -157,6 +161,12 @@ export default function FrontierMap() {
 				S.pulses.push({ id: nextParticleId++, th, r, age: 0, kind: "inside" });
 			}
 		}
+
+		// Busy-jitter: the more you grind, the harder you vibrate in place.
+		// Motion without displacement — the failure regime must not read as frozen.
+		const amp = 1.7 * g;
+		S.wigX += ((Math.random() * 2 - 1) * amp - S.wigX) * 0.35;
+		S.wigY += ((Math.random() * 2 - 1) * amp - S.wigY) * 0.35;
 
 		for (const p of S.pulses) p.age += TICK;
 		S.pulses = S.pulses.filter((p) => p.age < 0.9);
@@ -371,18 +381,32 @@ export default function FrontierMap() {
 					);
 				})}
 
+				{/* your gap to the edge — the thing that grows while you grind */}
+				{!pinned && (
+					<line
+						x1={px(S.rYou, THETA_YOU) + S.wigX}
+						y1={py(S.rYou, THETA_YOU) + S.wigY}
+						x2={px(S.R[youK], THETA_YOU)}
+						y2={py(S.R[youK], THETA_YOU)}
+						stroke={lineColor}
+						strokeWidth={1.2}
+						strokeDasharray="3 3"
+						opacity={0.6}
+					/>
+				)}
+
 				{/* you */}
 				<circle
-					cx={px(S.rYou, THETA_YOU)}
-					cy={py(S.rYou, THETA_YOU)}
+					cx={px(S.rYou, THETA_YOU) + S.wigX}
+					cy={py(S.rYou, THETA_YOU) + S.wigY}
 					r={5}
 					fill="var(--viz-policy)"
 					stroke="var(--sl-color-gray-6)"
 					strokeWidth={1.5}
 				/>
 				<text
-					x={px(S.rYou, THETA_YOU) + 9}
-					y={py(S.rYou, THETA_YOU) + 4}
+					x={px(S.rYou, THETA_YOU) + S.wigX + 9}
+					y={py(S.rYou, THETA_YOU) + S.wigY + 4}
 					fontSize={10.5}
 					fontWeight={700}
 					fill="var(--viz-policy)"
