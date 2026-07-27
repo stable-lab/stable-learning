@@ -146,7 +146,7 @@ living simulator per chapter, structured captions, references per page.
   2602.06036 + LMSYS "next-generation speculative decoding" post (measured
   acc-len/speedup table); DSpark arXiv 2607.05147 + LMSYS SGLang integration
   post (STS calibration, SPS cost model, verify modes).
-- [ ] ch03 addendum: `mean-field-trap.mdx` + `MeanFieldSampler` — why parallel
+- [x] ch03 addendum: `mean-field-trap.mdx` + `MeanFieldSampler` — why parallel
       blocks sample a product of marginals, not the joint: marginalization
       primer (contingency tables, np/torch multi-modal collision), the
       CE-objective-learns-the-marginal insight, MTP (DeepSeek-V3, D=1) as the

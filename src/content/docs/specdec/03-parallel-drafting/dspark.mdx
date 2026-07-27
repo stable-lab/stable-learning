@@ -2,7 +2,7 @@
 title: "DSpark: Verification on a Budget"
 description: Suffix decay, semi-autoregressive drafting, and load-aware variable-length verification
 sidebar:
-  order: 1
+  order: 2
 ---
 
 import SuffixDecayViz from '../../../../components/visualizations/SuffixDecayViz';
@@ -11,9 +11,9 @@ Everything so far priced speculation for **one request on an idle GPU**. Product
 
 ## Problem 1: Suffix Decay
 
-A fully parallel drafter (a block-diffusion model, a set of multi-token heads) guesses position 9 without knowing what it guessed for position 8 — the block's positions are conditionally independent. Early positions are fine; later ones compound every upstream uncertainty, and per-position acceptance **decays along the block**. The prefix-acceptance semantics from chapter 1 make this brutal: a position contributes only if *everything* before it survived, so the survival curve is a product of decaying terms — most of a long block is dead weight before it's ever verified.
+A fully parallel drafter (a block-diffusion model, a set of multi-token heads) guesses position 9 without knowing what it guessed for position 8 — the block's positions are conditionally independent. The distributional reason that independence is fatal — every position samples a *marginal* as if it were a conditional — is [the previous page](../mean-field-trap/); here it arrives as a bill. Early positions are fine; later ones compound every upstream uncertainty, and per-position acceptance **decays along the block**. The prefix-acceptance semantics from chapter 1 make this brutal: a position contributes only if *everything* before it survived, so the survival curve is a product of decaying terms — most of a long block is dead weight before it's ever verified.
 
-DSpark's architectural fix is **semi-autoregressive drafting**: a parallel backbone proposes the block in one pass, and a *lightweight sequential module* (a Markov/RNN-scale coupler, not a second transformer) threads through it so each drafted token conditions on its predecessor within the block. One cheap sequential sweep restores most of the intra-block dependency — the decay flattens dramatically while drafting stays ~one-pass cheap.
+DSpark's architectural fix is **semi-autoregressive drafting**: a parallel backbone proposes the block in one pass, and a *lightweight sequential module* (the first-order Markov head — a transition bias on each position's logits from its sampled predecessor, not a second transformer) threads through it so each drafted token conditions on its predecessor within the block. One cheap sequential sweep restores most of the intra-block dependency — the decay flattens dramatically while drafting stays ~one-pass cheap.
 
 ## Problem 2: Verifying Tokens That Are Already Dead
 

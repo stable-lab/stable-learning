@@ -55,7 +55,7 @@ Half of production speculative-decoding time can disappear into host–device sy
 Nothing the drafter proposes survives without clearing the target's acceptance rule, position by position. The output distribution is the target's, exactly — same theorem as chapter 1, no exceptions for exotic drafters. If the diffusion block is bad, you'll see it in the *drafts wasted* metric, not in the text.
 :::
 
-Block drafting does introduce a new failure mode of its own: the later positions of a parallel block are guessed with the least information, so acceptance *decays along the block* — and under batch load, verifying doomed suffixes wastes real capacity. Pricing and pruning that waste is [DSpark's job](dspark/).
+Block drafting does introduce a new failure mode of its own: the later positions of a parallel block are guessed with the least information, so acceptance *decays along the block* — and under batch load, verifying doomed suffixes wastes real capacity. *Why* the block decays — the draft samples marginals, not the joint — is [the next page](mean-field-trap/); pricing and pruning the waste under load is [DSpark's job](dspark/).
 
 ## References
 

@@ -1,0 +1,113 @@
+---
+title: "The Mean-Field Trap"
+description: Parallel drafts sample a product of marginals, not the joint — marginalization from scratch, multi-modal collision, and the first-order fix
+sidebar:
+  order: 1
+---
+
+import MeanFieldSampler from '../../../../components/visualizations/MeanFieldSampler';
+
+[DFlash](../) closed on a warning: the deeper positions of a parallel block accept less, and the toy race hid it. It is tempting to file that under engineering — later positions are "harder," a bigger drafter will fix it. It won't, because the failure isn't a capacity problem. It is a **distributional** one, and you can read it straight off the drafter's type signature.
+
+Ask what a fully parallel head at block offset $k$ actually outputs. It has seen the prefix $t_{\le i}$ and nothing else — every position in the block is produced in the same forward pass, so none can see its neighbors. The best any such head can represent is
+
+$$
+p(t_{i+k} \mid t_{\le i}).
+$$
+
+Look at what is missing from the conditioning: $t_{i+1}, \ldots, t_{i+k-1}$ — the very tokens the same pass is guessing to its left. The head has **marginalized** over every possible predecessor inside the block. Sampling all $K$ positions independently is therefore equivalent to assuming
+
+$$
+p(t_{i+1}, \ldots, t_{i+K} \mid t_{\le i}) \;\approx\; \prod_{k=1}^{K} p(t_{i+k} \mid t_{\le i})
+$$
+
+— a **mean-field approximation**, physics' name for replacing a coupled system with a product of independent averages. Every factor on the right can be individually perfect and the product still be wrong. At $K=1$ nothing bad can happen, which is why one family of drafters never notices (we'll come back to that). At DFlash's $K=16$, the trap is wide open.
+
+## Marginalization, From Scratch
+
+"Marginalize" is one of those words everyone nods along to, so pin it down: marginalization sums a variable *out* of a joint distribution, $p(B) = \sum_A p(A, B)$. The name is bookkeeping, not metaphor — in a contingency table you sum each row and write the totals in the table's *margin*; that strip of totals is the marginal distribution.
+
+Make it concrete with the two-token example this page will keep reusing. The prefix is `x = `, and suppose exactly two continuations occur in the wild, each half the time: `np` then `.array`, or `torch` then `.tensor`. The true joint, with its margins written where margins belong:
+
+| $p(t_1, t_2)$ | `.array` | `.tensor` | *margin* |
+|---|---|---|---|
+| **`np`** | 0.5 | 0 | **0.5** |
+| **`torch`** | 0 | 0.5 | **0.5** |
+| *margin* | **0.5** | **0.5** | |
+
+Both marginals are perfectly balanced coins, and each is *correct*. The head at offset $+1$, asked "given `x = `, what comes next?", should answer: `np` with probability ½, `torch` with probability ½. The head at $+2$, asked "given `x = ` *and nothing else*, what comes two tokens later?", should answer `.array` or `.tensor`, again half-and-half — it has summed $t_1$ out, and the two modes smear together in its answer. That "should" is where the intuition *the head is just undertrained* goes to die:
+
+:::note[Learning the marginal is not the bug]
+The parallel head at $+2$ is trained with cross-entropy on "given only the prefix, predict $t_2$." The optimum of that objective **is** the marginal $p(t_2 \mid \text{prefix})$ — a better-trained head converges to it *harder*. The objective demands the marginal. The error happens later, at sampling time.
+:::
+
+Here is the sampling-time error, precisely. The chain rule factors the joint *exactly*: $p(t_1, t_2) = p(t_1)\,p(t_2 \mid t_1)$ — an identity, and autoregressive models implement it term by term. The parallel drafter instead samples from $p(t_1)\,p(t_2)$: it substitutes the **marginal for the conditional**. That substitution has a name — it is an *independence assumption*, and independence is the if-and-only-if condition for product-of-marginals to equal the joint. Multiply our two individually-correct coins and watch where the mass lands:
+
+| $p(t_1)\,p(t_2)$ | `.array` | `.tensor` |
+|---|---|---|
+| **`np`** | 0.25 | **0.25** |
+| **`torch`** | **0.25** | 0.25 |
+
+Half the probability mass now sits in cells whose true probability is **zero**. That is where `np.tensor` comes from — not a confused model, but two correct marginals, multiplied. The one-sentence version to keep: **marginalization is a correct operation; the bug is using a marginal *as* a conditional.**
+
+## Watch the Mass Land Wrong
+
+<MeanFieldSampler client:only="react" />
+
+<div class="viz-caption">
+**What it models.** The `np`/`torch` world as a running experiment. Every round, a drafter samples a two-token continuation of `x = ` and the target verifies position 2 with the [chapter 1 rule](../../01-fundamentals/rejection-sampling/) — accept with probability min(1, p/q), rejected drafts flash red and the target resamples. The 2×2 contingency table fills with where drafts actually land (blue heat = draft mass), and the empirical marginals accumulate in the table's margin, where marginals live. On the right, the same experiment stretched to a K-position block: bars are the measured probability a draft survives *through* position k; amber dots are each position's raw acceptance rate.
+
+**Knobs.** The drafter switch is this page in one control: *mean-field* samples both positions from their individually-correct marginals; *+ Markov head* samples position 2 from the conditional given the `t₁` actually drawn. ρ is the coupling — at 1.0 the modes are locked (`np` forces `.array`); at 0 the two tokens are genuinely independent. K stretches the block.
+
+**Try this.** Run mean-field at ρ = 1.0 and watch roughly a quarter of the mass pile into each *impossible* cell — `np.tensor`, `torch.array` — while position-2 acceptance sits near 50% and *mismatched shipped* stays pinned at zero: the verifier eats every bad pair, so the trap costs speed, never correctness. Flip the Markov head on and watch the off-diagonal empty out and the K-block bars go flat. Then drag ρ to 0 and notice mean-field is suddenly fine — the trap only exists where tokens are coupled. In real text, that is everywhere.
+</div>
+
+## Multi-Modal Collision Is Why the Suffix Dies
+
+The worked example is the failure in miniature: a **multi-modal** continuation — two coherent futures — collides with an independence assumption, and the sample lands *between* the modes, in text no model would ever write. Two positions and one fork already make half of the drafter's samples garbage. Now scale the intuition: real text forks constantly, and the deeper a block position sits, the more unresolved forks stand between it and the prefix — the more predecessors have been marginalized away, the more modes smear together in its marginal. Deeper positions aren't "harder"; their marginals are *flatter*, and a flat marginal loses more often against a sharp conditional in the $\min(1, p/q)$ game.
+
+That is exactly the suffix decay DSpark measures on DFlash-style parallel drafts: per-position acceptance decays along the block, from 0.87 at the front to 0.78 at the tail on code, and from 0.72 to 0.63 on chat — while EAGLE-3's autoregressive draft, which never breaks the chain rule, stays stable or even trends upward. The prefix-acceptance semantics from chapter 1 then compound the decay: a position only counts if everything before it survived, so a modest per-position slide multiplies into a suffix that is mostly dead weight.
+
+## The Fix: A First-Order Markov Head
+
+DSpark's correction is almost embarrassingly small. Replace the independent product with a **first-order Markov chain**:
+
+$$
+\prod_{k=1}^{K} p(t_{i+k} \mid t_{\le i},\, t_{i+k-1}).
+$$
+
+Mechanically: the heavy parallel backbone still produces base logits for all $K$ positions in one pass, exactly like DFlash. Then, before *sampling* position $k$, a featherweight head takes the token actually sampled at $k-1$ and adds a **transition bias** to position $k$'s logits — in DSpark, a low-rank table $B(t_{k-1}, \cdot) = W_1[t_{k-1}]\,W_2$. In our example: once $+1$ samples `np`, the bias at $+2$ suppresses `.tensor`. The correction is precisely *picking the right row of the contingency table* instead of spraying samples over the whole table — it puts $p(t_2 \mid t_1)$ approximately back where the marginal was standing in for it.
+
+The key is the price. [EAGLE](../../02-eagle/) also restores the chain rule — by running its draft head autoregressively in feature space, so $K$ tokens cost $K$ small-model forwards on the latency-critical path. DSpark's sequential part is sixteen bias-adds; the backbone runs **once**, in parallel. That asymmetry is why draft length can stretch from 4 to 16 tokens while per-round latency grows by only 0.2–1.3%.
+
+## The MTP Frame
+
+One more datapoint locates everything on a single axis. DeepSeek-V3 trains a **multi-token prediction (MTP)** module alongside the main model: it predicts additional future tokens during training, densifying the learning signal — an idea proposed by Gloeckle et al. at Meta. At inference the module doubles as a *self-drafter* for speculative decoding, with draft depth $D = 1$: one token ahead, conditioned on the token actually sampled before it.
+
+At $D = 1$ the chain rule is trivially intact — there is no "inside of the block" to marginalize over. That is exactly why V3 never hits the trap, and why naively widening MTP into a 16-token parallel block walks straight into it. Which puts every drafter in this track on one axis — *how much of the within-block chain rule do you keep, and what serial cost do you pay for it?*
+
+| Method | Within-block joint approximation | Draft-side serial cost |
+|---|---|---|
+| Medusa / DFlash | $\prod_k p(t_{i+k} \mid t_{\le i})$ — mean-field | none |
+| DeepSeek-V3 MTP | exact chain rule, but $D=1$ degenerates the problem | one extra module pass |
+| EAGLE | exact chain, autoregressive in feature space | $K$ draft forwards |
+| DSpark | first-order Markov chain | $K$ tiny-head steps |
+
+DSpark's thesis is that this axis has sharply diminishing returns: the step from mean-field to **first-order** captures most of the available gain — macro-average accepted length improves 16.3–18.4% over DFlash and 26.7–30.9% over EAGLE-3 across Qwen3 4B/8B/14B — while the step from first-order up to full autoregression buys a marginal gain in draft quality far smaller than its marginal cost in serial latency. The cleanest single piece of evidence: a 2-layer DSpark drafter beats the 5-layer DFlash baseline across all domains. Depth spent on within-block structure outperforms depth spent on a better mean field.
+
+## Quality Here; How Much to Verify, Next Door
+
+Everything on this page is about **draft quality** — making the block match the joint. It deliberately says nothing about a second, orthogonal question: **how much of the block is worth verifying?** Even with the Markov correction, acceptance still decays along the suffix, and whether position 16 deserves a verify slot depends on its predicted survival probability and on what that slot costs — nearly free when memory-bound at low batch, real FLOPs when compute-bound at high batch. Pricing and truncating the block by expected value is a scheduling problem, and it is [DSpark's other half](../dspark/), covered on the next page. The same economics is why DSpark walks away from tree drafting entirely: a tree multiplies verify tokens exactly where batch capacity is scarcest, and one chain with high acceptance and a prunable tail buys more than a bush of alternatives.
+
+None of it touches losslessness. Verification is still the target's rejection sampling from [chapter 1](../../01-fundamentals/rejection-sampling/), always performed; scheduling decides how *long*, never *whether*. And the mean-field trap itself only ever cost speed, not correctness — every `np.tensor` the drafter proposed died at the verifier. The bill for a bad joint arrives as rejections, not as text.
+
+## References
+
+- DeepSeek-AI. *DeepSeek-V3 Technical Report.* [arXiv:2412.19437](https://arxiv.org/abs/2412.19437)
+- Gloeckle, Youbi Idrissi, Rozière, Lopez-Paz, Synnaeve. *Better & Faster Large Language Models via Multi-token Prediction.* ICML 2024. [arXiv:2404.19737](https://arxiv.org/abs/2404.19737)
+- Cai et al. *Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads.* ICML 2024. [arXiv:2401.10774](https://arxiv.org/abs/2401.10774)
+- Li, Wei, Zhang, Zhang. *EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty.* ICML 2024. [arXiv:2401.15077](https://arxiv.org/abs/2401.15077)
+- Li, Wei, Zhang, Zhang. *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test.* [arXiv:2503.01840](https://arxiv.org/abs/2503.01840)
+- Chen, Liang, Liu. *DFlash: Block Diffusion for Flash Speculative Decoding.* ICML 2026. [arXiv:2602.06036](https://arxiv.org/abs/2602.06036)
+- Cheng et al. *DSpark: Confidence-Scheduled Speculative Decoding with Semi-Autoregressive Generation.* [arXiv:2607.05147](https://arxiv.org/abs/2607.05147)
+- LMSYS. *DSpark in SGLang: Speculative Decoding with Confidence-Driven, Variable-Length Verification.* [lmsys.org](https://www.lmsys.org/blog/2026-07-06-dspark-sglang)
