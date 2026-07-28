@@ -1,0 +1,58 @@
+---
+title: "MTP: The Frame That Locates Everyone"
+description: Multi-token prediction from training signal to self-drafter — Gloeckle's heads, DeepSeek-V3's D=1 module, and the chain-rule axis for every drafter in this track
+sidebar:
+  order: 2
+---
+
+import MTPModules from '../../../../components/visualizations/MTPModules';
+
+Every drafter in this track so far has been an **add-on**: a separate head or model, trained after the fact to imitate a frozen target. Multi-token prediction (MTP) enters from the opposite side. It changes the *target's own training objective* — predict several future tokens at each position, not just the next one — and speed wasn't even the original point. That detour turns out to end at the cleanest vantage point in the whole track: a single axis that locates Medusa, DFlash, EAGLE, and [DSpark](../dspark/) as four answers to one question.
+
+## Born as a Training Signal
+
+Gloeckle et al. (Meta, 2024) trained language models with $n$ output heads on a shared trunk, each head predicting a different future offset: $t_{i+1}, t_{i+2}, \ldots, t_{i+n}$. The motivation was *sample efficiency* — every position now supervises $n$ predictions instead of one, and the model is pushed to represent where the text is *going*, not just its next step. It worked, and worked best exactly where local continuation is most predictable: 13B models trained this way solved 12% more HumanEval and 17% more MBPP problems than a next-token-only twin.
+
+Two inference-time reuses of those heads followed:
+
+- **Self-speculative decoding.** The extra heads draft, the main head verifies — up to ~3× faster inference with 4-token prediction, with no separate draft model to train, deploy, or keep in sync. The drafter ships *inside* the checkpoint.
+- **Medusa** made the same move training-free: bolt $n$ decoding heads onto a finished model, fine-tune only the heads, draft with them (≈2.2× without touching the backbone).
+
+Look at the type signature of those heads, though. Each one sees the prefix and *only* the prefix — head $+2$ predicts $p(t_{i+2} \mid t_{\le i})$ with no idea what head $+1$ just proposed. Sampling the heads jointly multiplies marginals as if they were conditionals. That is precisely the **mean-field trap** dissected on [the DSpark page](../dspark/), and it is why Medusa-style heads need candidate trees and generous verification to recover acceptable acceptance: many of their drafts land *between* the modes of the true continuation.
+
+## DeepSeek-V3: The Sequential Variant
+
+DeepSeek-V3 kept the training-signal idea and quietly fixed the joint. Its MTP module is not another parallel head — it is a small **sequential** module: one extra transformer block that receives the main model's hidden state *and the embedding of the token actually sampled*, and predicts the token after that. V3 uses depth $D = 1$: one extra future token, conditioned on its realized predecessor.
+
+<MTPModules client:visible />
+
+<div class="viz-caption">
+**What it shows.** The two architectures of "predict more than one token." Left: parallel heads on a shared trunk — every head conditions on the prefix alone, so jointly sampling them assumes the block's tokens are independent. Right: V3's MTP block consumes the *sampled* token (green) alongside the trunk's hidden state (amber) — the same load-bearing design choice as [EAGLE's](../../02-eagle/) token input, and the reason the chain rule survives. The module shares the embedding matrix and LM head with the main model; the only new weights are one transformer block.
+</div>
+
+At training time this densifies supervision like Gloeckle's heads did. At inference the module doubles as a **self-drafter**: speculative decoding with draft depth 1, where the module proposes $t_{i+2}$ and the next main-model pass verifies it. The V3 report measures the acceptance rate of that second token at **85–90%** across topics — enough for ~**1.8×** decoding TPS — from a module the serving stack gets for free.
+
+At $D = 1$ the chain rule is *trivially* intact: there is no "inside of the block" to marginalize over, no neighbor a position could fail to see. That is why V3 never hits the trap — and why naively widening MTP into a 16-token parallel block walks straight into it. The trap isn't a property of MTP; it's a property of *breaking the chain rule*, and $D=1$ is too short to break anything.
+
+## One Axis for Every Drafter
+
+Which puts every drafter in this track on one axis — *how much of the within-block chain rule do you keep, and what serial cost do you pay for it?*
+
+| Method | Within-block joint approximation | Draft-side serial cost |
+|---|---|---|
+| Medusa / DFlash | $\prod_k p(t_{i+k} \mid t_{\le i})$ — mean-field | none |
+| DeepSeek-V3 MTP | exact chain rule, but $D=1$ degenerates the problem | one extra module pass |
+| EAGLE | exact chain, autoregressive in feature space | $K$ draft forwards |
+| DSpark | first-order Markov chain | $K$ tiny-head steps |
+
+Read the extremes first. [EAGLE](../../02-eagle/) keeps the chain rule exactly and pays full price: $K$ sequential head passes on the latency-critical path. [DFlash](../) pays nothing and keeps nothing: one parallel pass, mean-field joint, decaying suffix. V3's MTP sits at the degenerate corner — exact chain rule *and* almost no serial cost, but only because $D=1$ ducks the question entirely.
+
+[DSpark](../dspark/)'s thesis is that the interesting part of this axis is its *bottom-left*: the step from mean-field to **first-order** — condition each position on just its sampled predecessor — captures most of the available acceptance gain, while the step from first-order up to full autoregression buys a marginal improvement in draft quality far smaller than its marginal cost in serial latency. The evidence and the mechanism are on [that page](../dspark/); the axis is the frame to carry out of this track. When the next drafter paper lands, ask where it sits on this line and what it paid for the seat.
+
+## References
+
+- Gloeckle, Youbi Idrissi, Rozière, Lopez-Paz, Synnaeve. *Better & Faster Large Language Models via Multi-token Prediction.* ICML 2024. [arXiv:2404.19737](https://arxiv.org/abs/2404.19737)
+- Cai et al. *Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads.* ICML 2024. [arXiv:2401.10774](https://arxiv.org/abs/2401.10774)
+- DeepSeek-AI. *DeepSeek-V3 Technical Report.* [arXiv:2412.19437](https://arxiv.org/abs/2412.19437)
+- Li, Wei, Zhang, Zhang. *EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty.* ICML 2024. [arXiv:2401.15077](https://arxiv.org/abs/2401.15077)
+- Cheng et al. *DSpark: Confidence-Scheduled Speculative Decoding with Semi-Autoregressive Generation.* [arXiv:2607.05147](https://arxiv.org/abs/2607.05147)

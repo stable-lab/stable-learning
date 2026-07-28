@@ -9,6 +9,10 @@ import rehypeKatex from 'rehype-katex';
 export default defineConfig({
 	site: 'https://stable-lab.github.io',
 	base: '/stable-learning',
+	redirects: {
+		'/specdec/03-parallel-drafting/mean-field-trap/':
+			'/specdec/03-parallel-drafting/dspark/',
+	},
 	markdown: {
 		remarkPlugins: [remarkMath],
 		rehypePlugins: [rehypeKatex],

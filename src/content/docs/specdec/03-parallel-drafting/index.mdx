@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import BlockDiffusionViz from '../../../../components/visualizations/BlockDiffusionViz';
+import DFlashArchitecture from '../../../../components/visualizations/DFlashArchitecture';
 
 The EAGLE line spent three papers raising α. Look at where that leaves the speedup formula, though: with acceptance lengths of 4–5 already achieved, the remaining cost is the **drafting loop itself**. An EAGLE head still runs *sequentially* — γ tokens means γ forward passes of the head, plus tree bookkeeping, all on the latency-critical path. In the [chapter 1 arithmetic](../01-fundamentals/speedup-model/): α is nearly maxed; the frontier is $c$.
 
@@ -22,6 +23,14 @@ So each cycle becomes: one parallel draft pass proposes the block → one target
 A drafter that never reads the context can't guess well, and re-encoding the context with the draft model would burn the savings. DFlash conditions the drafter through **KV injection**: the *target model's* hidden representations of the context are passed through the draft model's KV projections and written **directly into the draft model's KV cache, at every draft layer**. The drafter never builds its own understanding of the prompt — it drafts inside the target's.
 
 This is the same load-bearing idea as EAGLE's feature conditioning, taken further: not one feature vector per step, but the target's full processed context, available to every drafted position in parallel.
+
+## The Model at a Glance
+
+<DFlashArchitecture client:visible />
+
+<div class="viz-caption">
+**What it shows.** One DFlash cycle. The target (left) has already processed the context; its hidden states at every layer are pushed through the draft model's KV projections and written straight into the draft KV cache (amber arrows) — the drafter never builds its own view of the prompt. The draft diffusion model (right) starts from a fully masked K-token block, runs its layers over **all K positions at once**, and repeats for S refinement passes (S = 1–2 in practice), committing positions in confidence order. The finished block goes back to the target for a single verify pass (green) under the chapter-1 rule. Count the big matmuls per cycle: two — one draft, one verify. Compare EAGLE's [feature-flow diagram](../02-eagle/): same KV-reuse instinct, but there the draft head loops γ times.
+</div>
 
 ## Watch the Block Get Drafted
 
@@ -55,7 +64,7 @@ Half of production speculative-decoding time can disappear into host–device sy
 Nothing the drafter proposes survives without clearing the target's acceptance rule, position by position. The output distribution is the target's, exactly — same theorem as chapter 1, no exceptions for exotic drafters. If the diffusion block is bad, you'll see it in the *drafts wasted* metric, not in the text.
 :::
 
-Block drafting does introduce a new failure mode of its own: the later positions of a parallel block are guessed with the least information, so acceptance *decays along the block* — and under batch load, verifying doomed suffixes wastes real capacity. *Why* the block decays — the draft samples marginals, not the joint — is [the next page](mean-field-trap/); pricing and pruning the waste under load is [DSpark's job](dspark/).
+Block drafting does introduce a new failure mode of its own: the later positions of a parallel block are guessed with the least information, so acceptance *decays along the block* — and under batch load, verifying doomed suffixes wastes real capacity. *Why* the block decays — the draft samples marginals, not the joint — and what it costs to fix are [DSpark's job, next](dspark/); where block drafting sits against the MTP lineage (DeepSeek-V3's $D=1$ self-drafter) is [the closing frame](mtp/).
 
 ## References
 

@@ -155,6 +155,21 @@ living simulator per chapter, structured captions, references per page.
       DSpark). Live sampler: watch `np.tensor` mass pile into impossible
       cells under mean-field, empty out under the Markov head. Slots between
       the DFlash and DSpark pages (orders 0/1/2).
+- [x] ch03 restructure (2026-07-28): `mean-field-trap.mdx` dissolved — the
+      marginalization/mean-field material now opens the DSpark page ("Repair
+      the Joint, Meter the Verify": trap → Markov fix → confidence-scheduled
+      verify, `MeanFieldSampler` moved along); MTP promoted to its own page
+      `mtp.mdx` ("The Frame That Locates Everyone": Gloeckle training signal,
+      Medusa, DeepSeek-V3 D=1 self-drafter with 85–90% second-token
+      acceptance / 1.8× TPS, the chain-rule axis table as track closer).
+      New sidebar order: DFlash (0) → DSpark (1) → MTP (2).
+- [x] Model architecture diagrams, EagleFeatureFlow idiom (static SVG,
+      theme-var colors): `DFlashArchitecture` (target prefill → per-layer KV
+      injection → masked block → S refinement passes → one verify pass),
+      `DSparkArchitecture` (parallel backbone → base logits → Markov-head
+      bias sweep; confidence head → load-aware scheduler → red verify-window
+      cut), `MTPModules` (parallel heads vs V3's sequential module,
+      side by side).
 
 ---
 
