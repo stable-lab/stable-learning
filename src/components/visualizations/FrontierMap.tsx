@@ -14,10 +14,10 @@ import { useSimLoop } from "./lib/useSimLoop";
 const K = 120; // boundary sectors
 const TICK = 0.05; // months per sim tick
 const MAX_SPEED = 0.09; // units/month you can move outward at full edge-work
-const OTHERS_RATE = 4; // other groups' papers per month
-const OTHERS_BUMP = 0.03; // how far one outside paper pushes the boundary
+const OTHERS_RATE = 3; // other groups' papers per month
+const OTHERS_BUMP = 0.05; // how far one outside paper pushes the boundary
 const YOUR_BUMP = 0.07; // your dent (rarer, so make it visible)
-const SIGMA = 2.0; // bump falloff in sectors
+const SIGMA = 2.5; // bump falloff in sectors
 const EDGE_EPS = 0.05; // "at the edge" tolerance, model units
 const THETA_YOU = -Math.PI / 3; // your fixed heading (up-right)
 const HIST_CAP = 240; // distance samples (0.25 mo each → 60-month window)
@@ -42,8 +42,10 @@ let nextParticleId = 0;
 interface Sim {
 	t: number;
 	R: number[]; // boundary radius per sector
+	R0: number[]; // boundary at month 0 — the fixed ghost ring that proves growth
 	yours: number[]; // portion of the boundary you pushed
 	rYou: number;
+	rYouStart: number; // where you began — anchors your trail
 	paperAcc: number;
 	inside: number; // papers that landed inside the known
 	dents: number; // papers that pushed the boundary
@@ -59,7 +61,7 @@ const thOf = (k: number) => (2 * Math.PI * k) / K;
 const youK = ((Math.round((THETA_YOU / (2 * Math.PI)) * K) % K) + K) % K;
 
 function bumpAt(arr: number[], k: number, amp: number) {
-	for (let o = -6; o <= 6; o++) {
+	for (let o = -7; o <= 7; o++) {
 		arr[(k + o + K) % K] += amp * Math.exp(-(o * o) / (2 * SIGMA * SIGMA));
 	}
 }
@@ -68,21 +70,24 @@ function freshSim(): Sim {
 	const p1 = Math.random() * Math.PI * 2;
 	const p2 = Math.random() * Math.PI * 2;
 	const p3 = Math.random() * Math.PI * 2;
+	// Start small: the blob must have room to visibly GROW into the frame.
 	const R: number[] = [];
 	for (let k = 0; k < K; k++) {
 		const th = thOf(k);
 		R.push(
-			1 +
-				0.05 * Math.sin(3 * th + p1) +
-				0.035 * Math.sin(5 * th + p2) +
-				0.02 * Math.sin(9 * th + p3),
+			0.72 +
+				0.036 * Math.sin(3 * th + p1) +
+				0.025 * Math.sin(5 * th + p2) +
+				0.014 * Math.sin(9 * th + p3),
 		);
 	}
 	return {
 		t: 0,
 		R,
+		R0: [...R],
 		yours: new Array(K).fill(0),
-		rYou: 0.34,
+		rYou: 0.26,
+		rYouStart: 0.26,
 		paperAcc: 0,
 		inside: 0,
 		dents: 0,
@@ -105,8 +110,10 @@ export default function FrontierMap() {
 	const sim = useRef<Sim>(freshSim());
 	const [, commit] = useReducer((x: number) => x + 1, 0);
 	const [speed, setSpeed] = useState(20);
-	// 1.0 = grinding tricks on familiar ground, 0.0 = reading + working at the edge.
-	const [grind, setGrind] = useState(1.0);
+	// 1.0 = grinding tricks on familiar ground, 0.0 = reading + working at the
+	// edge. Default leans toward edge-work so the first Run shows the full
+	// mechanic (travel → arrival → dents); the failure regime is one drag away.
+	const [grind, setGrind] = useState(0.25);
 	const knobs = useRef(grind);
 	knobs.current = grind;
 
@@ -215,12 +222,14 @@ export default function FrontierMap() {
 
 	// ---- geometry ------------------------------------------------------------
 	const W = 560;
-	const H = 214;
+	const H = 230;
 	const cx = 135;
 	const cy = 102;
 	let maxR = 0;
 	for (const r of S.R) if (r > maxR) maxR = r;
-	const s = 88 / Math.max(1.4, maxR + 0.1); // auto-zoom as knowledge grows
+	// Fixed scale so growth is VISIBLE; zoom out only when the blob would
+	// overflow the frame (a constant-ratio zoom would cancel growth exactly).
+	const s = Math.min(70, 88 / Math.max(0.01, maxR + 0.1));
 	const px = (r: number, th: number) => cx + r * s * Math.cos(th);
 	const py = (r: number, th: number) => cy + r * s * Math.sin(th);
 
@@ -230,6 +239,15 @@ export default function FrontierMap() {
 		blob += `${k ? "L" : "M"}${px(S.R[k], th).toFixed(1)},${py(S.R[k], th).toFixed(1)}`;
 	}
 	blob += "Z";
+
+	// The boundary as it stood at month 0 — held fixed so accumulated growth
+	// reads as the widening gap between this dashed ring and the live blob.
+	let ghost = "";
+	for (let k = 0; k < K; k++) {
+		const th = thOf(k);
+		ghost += `${k ? "L" : "M"}${px(S.R0[k], th).toFixed(1)},${py(S.R0[k], th).toFixed(1)}`;
+	}
+	ghost += "Z";
 
 	// Boundary arcs you pushed, as runs of consecutive sectors.
 	const yourArcs: string[] = [];
@@ -319,6 +337,15 @@ export default function FrontierMap() {
 					stroke="var(--sl-color-gray-4)"
 					strokeWidth={1.5}
 				/>
+				{/* where the field stood at month 0 */}
+				<path
+					d={ghost}
+					fill="none"
+					stroke="var(--sl-color-gray-4)"
+					strokeWidth={1}
+					strokeDasharray="4 4"
+					opacity={0.55}
+				/>
 				{yourArcs.map((d) => (
 					<path
 						key={d}
@@ -380,6 +407,19 @@ export default function FrontierMap() {
 						/>
 					);
 				})}
+
+				{/* the ground you have covered — no edge-work, no trail growth */}
+				{S.rYou - S.rYouStart > 0.005 && (
+					<line
+						x1={px(S.rYouStart, THETA_YOU)}
+						y1={py(S.rYouStart, THETA_YOU)}
+						x2={px(S.rYou, THETA_YOU) + S.wigX}
+						y2={py(S.rYou, THETA_YOU) + S.wigY}
+						stroke="var(--viz-policy)"
+						strokeWidth={1.5}
+						opacity={0.45}
+					/>
+				)}
 
 				{/* your gap to the edge — the thing that grows while you grind */}
 				{!pinned && (
@@ -480,19 +520,31 @@ export default function FrontierMap() {
 					<text x={84} y={205}>
 						boundary you pushed
 					</text>
+					<line
+						x1={230}
+						x2={248}
+						y1={202}
+						y2={202}
+						stroke="var(--sl-color-gray-4)"
+						strokeWidth={1}
+						strokeDasharray="4 4"
+					/>
+					<text x={254} y={205}>
+						the field at month 0
+					</text>
 					<circle
-						cx={248}
-						cy={202}
+						cx={22}
+						cy={218}
 						r={4}
 						fill="none"
 						stroke="var(--viz-ref)"
 						strokeWidth={1.3}
 					/>
-					<text x={257} y={205}>
+					<text x={31} y={221}>
 						others&apos; results (push the edge)
 					</text>
-					<circle cx={432} cy={202} r={2} fill="var(--viz-ref)" opacity={0.6} />
-					<text x={440} y={205}>
+					<circle cx={236} cy={218} r={2} fill="var(--viz-ref)" opacity={0.6} />
+					<text x={244} y={221}>
 						your papers, absorbed
 					</text>
 				</g>
