@@ -183,6 +183,16 @@ per principle, structured captions, verified references per page.
       80-hour week as a fitness achievement; burnout failure regime live).
 - [x] "Don't Be an Ostrich" section in Bet on What Scales — reference the
       strongest implementations, watch frontier industry labs, compete.
+- [x] `MotivationSim` on Why Do Research — two students, identical coins,
+      different fuel (degree vs curiosity): the degree lane spirals and
+      quits in years 2-4 while the curiosity lane survives the decade;
+      claims verified by 20k-seed simulation across the knob range.
+- [x] Data charts on Why Do Research: `EarningsPremium` (Casey/Economist
+      premiums over non-graduates — BA 14% / MA 23% / PhD 26%, the 3-point
+      marginal edge bracketed; baseline error in the prose caught and
+      fixed) + `MentalHealthRates` (Evans 41/39% vs 6% with the
+      convenience-sample caveat; Levecque 32% vs 14% GHQ4+).
+- [x] Site-wide author byline in the footer: Written by Zhongming Yu.
 - Acceptance: `npm run build` clean; both themes OK; references verified.
 
 ---

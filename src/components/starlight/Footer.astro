@@ -10,6 +10,7 @@ import logo from '../../assets/stable-logo.jpeg';
 <footer class="site-footer">
   <div class="footer-content">
     <img src={logo.src} alt="Stable Lab" class="footer-logo" />
+    <p class="footer-byline">Written by Zhongming Yu</p>
     <p>&copy; {new Date().getFullYear()} Stable Lab. All rights reserved.</p>
   </div>
 </footer>
@@ -44,5 +45,11 @@ import logo from '../../assets/stable-logo.jpeg';
     margin: 0;
     font-size: 0.85rem;
     color: var(--sl-color-gray-3);
+  }
+
+  .footer-byline {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 0.95rem !important;
+    color: var(--sl-color-gray-2) !important;
   }
 </style>

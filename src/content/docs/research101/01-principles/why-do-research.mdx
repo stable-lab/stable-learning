@@ -5,6 +5,10 @@ sidebar:
   order: 1
 ---
 
+import MotivationSim from '../../../../components/visualizations/MotivationSim';
+import EarningsPremium from '../../../../components/visualizations/EarningsPremium';
+import MentalHealthRates from '../../../../components/visualizations/MentalHealthRates';
+
 This track teaches the how of research: how to find the frontier, how to bet on what scales, how fast to run. But the how is worthless if the why underneath it is wrong. Method mounted on a bad motive does not repair the motive — it just delivers you to the wrong destination with excellent technique. So before the first principle, we settle the prior question, the one that never appears in a methods track because it sounds like a life question rather than a research question: **what are you working for?**
 
 It has stopped being a life question. In 2024, The AI Scientist ran the entire research loop with no human in it — generated the ideas, wrote the code, ran the experiments, drafted full papers, and reviewed them — at a cost of under fifteen dollars per paper. Set the quality debate aside; the direction is what matters. The ordinary paper — known problem, incremental delta, competent write-up — is becoming an artifact that machines produce in bulk at near-zero cost, and cheaper every quarter. In that world, *what am I working for* is not a question you answer once in a personal statement. It is a question you must keep asking, continuously, because every year the set of answers that survive it gets smaller.
@@ -17,6 +21,18 @@ The first half is about you: you will be miserable. Research is a sequence of lo
 
 The second half is about the work, and it is the half that has changed. Degree-driven research converges, with almost physical inevitability, on one artifact: the minimum publishable unit — a known problem, a small delta, a safe venue. We are living in the age of the mass-produced paper, and that is precisely the artifact agent pipelines now generate end to end for the price of a sandwich. Spending your best years hand-crafting it is not a strategy that fails in some distant future; it is competing, today, against automation on the one axis where automation already wins. **It is a waste of your own time, purchased at the highest price you will ever pay for anything.**
 
+Watch the mechanism do its work: two students, ten years, and — by construction — exactly the same luck.
+
+<MotivationSim client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A decade of research as a sequence of monthly bets, run twice with the same luck. One coin per month decides whether the experiment fails or progresses, and the identical outcome is applied to both lanes — amber works for the degree, blue for curiosity and the skills. Both tanks drain a little every month; a failed month is where the lanes split. For amber it is pure cost, extra drain — nothing was learned that it wanted to know. For blue it is mild recovery — the same failure taught it something it came to learn. Shipped papers refill both tanks, amber's far more, because papers are the only thing amber is here for. The trap is the dotted line: below it, low fuel degrades the quality of the work, which slows progress, which pushes the next refill further away — misery is not the side effect of the wrong why, it is the mechanism by which the wrong why destroys the work. At zero, the lane quits.
+
+**Knobs.** *How brutal the field is* sets the fraction of months that fail — the field's true failure rate, applied to both lanes equally. Step advances a single month; Reset draws a fresh decade of coins.
+
+**Try this.** Watch the first year and a half at defaults: same coins, green flags landing on the same months — the first paper ships simultaneously in both lanes, which is exactly why the wrong why goes undetected until the costs are sunk. Keep watching as amber crosses the dotted line: its next paper drifts later, the delayed refill lets it sink faster, and the spiral usually closes somewhere in years two to four — while blue, on the very same coins, wobbles and recovers all the way to the end of the decade. Then push brutality to 90% and reset a few times: amber's quit races forward toward year two, but blue never collapses — its papers just come slower. That asymmetry is the point: brutality only sets how fast the wrong why fails; the why itself decides whether it fails at all.
+</div>
+
 :::note[Quitting early is the cheap exit]
 There is no shame in the decision — the shame is in refusing to make it. Leaving in year one costs a year. Leaving in year five costs several of the most important years you will ever have. Not leaving at all costs the most: a career of papers nobody needed, produced in a state you hated. If the audit says go, going is the intelligent move, and it is never cheaper than it is today.
 :::
@@ -25,9 +41,21 @@ There is no shame in the decision — the shame is in refusing to make it. Leavi
 
 Now suppose the degree is not your reason. You still owe yourself an honest price sheet, because a PhD is not a job and it is not school. **It is a bet: enormous fixed cost, uncertain marginal return.** The stake is several of the most important years of your life — the years of maximum energy, maximum optionality, maximum compounding — pushed onto a single table in one of the highest-variance domains in existence. Placing that bet can be right. Placing it without knowing what you are buying is never right.
 
-So know what you are not buying first. **Nobody guarantees you that a PhD leads to a better job** — not your advisor, not your university, and certainly not the market. The Economist ran the economics fifteen years ago and the verdict has only hardened: the earnings premium of a PhD over a bachelor's degree is about 26%, a one-year master's captures almost all of it at 23%, and in several fields — mathematics and computing among them — the doctorate's edge over the master's vanishes entirely. Meanwhile the academic career the training nominally prepares you for is structurally oversupplied: the system mints graduates far faster than it mints faculty positions, which is exactly why it can run on cheap, motivated, disposable labor. If money is what you want, the master's holder who started working five years earlier is ahead of you and staying ahead.
+So know what you are not buying first. **Nobody guarantees you that a PhD leads to a better job** — not your advisor, not your university, and certainly not the market. The Economist ran the economics fifteen years ago and the verdict has only hardened: the earnings premium of a PhD — measured against those who could have gone to university but chose not to — is about 26%; a one-year master's captures almost all of it at 23% (a bachelor's alone already commands 14%), and in several fields — mathematics and computing among them — the doctorate's edge over the master's vanishes entirely. Meanwhile the academic career the training nominally prepares you for is structurally oversupplied: the system mints graduates far faster than it mints faculty positions, which is exactly why it can run on cheap, motivated, disposable labor. If money is what you want, the master's holder who started working five years earlier is ahead of you and staying ahead.
 
-Then price the health line, because the base rates are genuinely bad. Levecque and colleagues measured 3,659 PhD students and found roughly **one in three** at risk of a common psychiatric disorder — depression above all — significantly worse than highly educated employees or other higher-education students. Evans and colleagues, surveying 2,279 graduate students across 26 countries, found anxiety and depression at more than **six times** the rate of the general population. These are not anecdotes about students who weren't tough enough; they are the measured base rates of the environment you are proposing to enter. The bet is collateralized by your mind and your body, not just your CV.
+<EarningsPremium client:only="react" />
+
+<div class="viz-caption">
+**What it shows.** The price sheet for the credential: over the earnings of those who skipped university, a bachelor's commands a 14% premium, a one-year master's 23%, and the doctorate — several years dearer — 26%: a marginal edge of about three points, and in maths and computing effectively nothing. Source: The Economist, "The disposable academic" (2010), drawing on Bernard Casey's analysis of British graduates.
+</div>
+
+Then price the health line, because the base rates are genuinely bad. Levecque and colleagues measured 3,659 PhD students and found roughly **one in three** at risk of a common psychiatric disorder — depression above all — significantly worse than highly educated employees or other higher-education students. Evans and colleagues, surveying 2,279 graduate students across 26 countries, found anxiety and depression at more than **six times** the rate of the general population. These are not anecdotes about students who weren't tough enough; they are the best-measured rates we have for the environment you are proposing to enter. The bet is collateralized by your mind and your body, not just your CV.
+
+<MentalHealthRates client:only="react" />
+
+<div class="viz-caption">
+**What it shows.** The best-measured rates we have for the environment: among 2,279 graduate students across 26 countries, 41% screened at moderate-to-severe anxiety and 39% at moderate-to-severe depression, against roughly 6% in the general population (GAD-7 / PHQ-9; Evans et al., *Nature Biotechnology*, 2018 — a self-selected online sample, not a population census: Evans et al. note respondents with a history of anxiety or depression may have been likelier to respond); on a separate instrument, 32% of 3,659 Flemish PhD students — one in three — crossed the GHQ4+ threshold for risk of a common psychiatric disorder, versus 14% of the highly educated general population (GHQ-12; Levecque et al., *Research Policy*, 2017, drawn from a full survey of Flemish PhD students, which points the same direction).
+</div>
 
 ## The Two Reasons That Survive
 
