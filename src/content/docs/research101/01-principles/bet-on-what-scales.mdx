@@ -2,7 +2,7 @@
 title: Bet on What Scales
 description: In a scaling era, a field that cannot absorb compute is not a niche — it is an expiration date
 sidebar:
-  order: 2
+  order: 3
 ---
 
 import ScalingRace from '../../../../components/visualizations/ScalingRace';
@@ -50,6 +50,12 @@ Three corollary heuristics, in the order I want you to apply them:
 :::caution[A higher ceiling buys delay, not survival]
 Play with the simulator's ceiling slider and internalize what it shows: making the clever method *better* only delays the crossover, it never prevents it, as long as compute keeps doubling. This is why "but the GNN papers were good" and "but the accelerator was real" are true and irrelevant. In a scaling era, an approach that cannot absorb compute does not get to be a stable niche. It gets a date. If you spend years there anyway, you will discover the specific misery the Chinese internet calls 做了个寂寞 — you worked long and hard and built, in the end, an emptiness.
 :::
+
+## Don't Be an Ostrich
+
+How does anyone end up spending years in a doomed field? Almost never by losing an argument. Nobody sits a student down and persuades them that a saturating method will outrun the scaling curve — **the commitment happens by not looking**, and not-looking has three favorite disguises, each of which feels like intelligence from the inside. The first is burying your head in the sand and assuming you are the smartest person thinking about this problem. You are not — the century of multiple discovery cataloged in [Research Is a Race](../research-is-a-race/) exists precisely to bury that assumption: if you can see the problem, a dozen stronger groups can see it too. The second is digging a hole in already-known territory and planting your flag in it — the interior trap from [Work on the Frontier](../work-on-the-frontier/), performed with extra self-congratulation, because now you are not merely decorating the interior, you are claiming to have discovered it. The third is benchmarking against weak baselines so the comparison flatters you. All three moves feel clever. All three end careers — quietly, on a delay — because each buys you months of feeling ahead in exchange for years of actually being behind.
+
+The antidote is exposure, on purpose. Reference the strongest implementations in existence, not the most convenient ones. Watch what the frontier industrial labs are shipping, because in a scaling era it is they — not the tail of the literature — who define where the curve actually is. And compete against them directly, with their numbers on your plots. This is uncomfortable by design: measuring yourself against the strongest baseline means losing on most axes, most days, in private. But that comparison is not optional — only its timing and its venue are. If you never face the strongest baseline yourself, the field will run the comparison for you later, in public, in the reviews of your paper.
 
 ## What This Principle Is — and Is Not
 

@@ -175,6 +175,14 @@ per principle, structured captions, verified references per page.
       vs. rival labs: effort knob, mid-race pause button, evaporated-months
       counter.
 - [x] Sidebar group + landing-page card (track listed first — onboarding).
+- [x] ch. "Why Do Research" (order 1, before the how) — the motivation audit:
+      LLM-agent-era urgency, degree-motivation → quit early, the PhD as a
+      high-cost uncertain bet, the two motivations that survive; The Why Test.
+- [x] ch. "The Complete Researcher" (order 5, closes the track) + `StaminaSim`
+      — taste (literature/philosophy/art as training) and stamina (the
+      80-hour week as a fitness achievement; burnout failure regime live).
+- [x] "Don't Be an Ostrich" section in Bet on What Scales — reference the
+      strongest implementations, watch frontier industry labs, compete.
 - Acceptance: `npm run build` clean; both themes OK; references verified.
 
 ---
