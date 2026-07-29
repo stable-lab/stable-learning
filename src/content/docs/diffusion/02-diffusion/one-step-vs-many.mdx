@@ -21,7 +21,7 @@ $$
 \mathbb{E}[x_0 \mid x_T] = \sum_i p(x^{(i)} \mid x_T)\, x^{(i)} \;\longrightarrow\; \frac{1}{N}\sum_i x^{(i)} \quad\text{as } \bar\alpha_T \to 0
 $$
 
-This is the same failure the [mean-field trap](../../../specdec/03-parallel-drafting/mean-field-trap/) describes for parallel token drafting, and it is worth seeing that it is literally the same failure. There, a drafter samples each position from its marginal and lands between two coherent futures, producing `np.tensor` — text no model would ever write. Here, a one-step sampler averages over every plausible image and lands between them, producing a shape no dataset ever contained. In both cases the individual quantity is computed *correctly*; the error is using an average where a commitment was required.
+This is the same failure the [mean-field trap](../../../specdec/03-parallel-drafting/dspark/#the-trap-a-product-of-marginals) describes for parallel token drafting, and it is worth seeing that it is literally the same failure. There, a drafter samples each position from its marginal and lands between two coherent futures, producing `np.tensor` — text no model would ever write. Here, a one-step sampler averages over every plausible image and lands between them, producing a shape no dataset ever contained. In both cases the individual quantity is computed *correctly*; the error is using an average where a commitment was required.
 
 <StepBudget client:only="react" />
 

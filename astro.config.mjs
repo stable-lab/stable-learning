@@ -10,8 +10,11 @@ export default defineConfig({
 	site: 'https://stable-lab.github.io',
 	base: '/stable-learning',
 	redirects: {
+		// The target must carry the site base: Astro emits it verbatim into the
+		// meta-refresh, and an absolute path without /stable-learning resolves
+		// to the domain root and 404s on Pages. Same trap as commit c005587.
 		'/specdec/03-parallel-drafting/mean-field-trap/':
-			'/specdec/03-parallel-drafting/dspark/',
+			'/stable-learning/specdec/03-parallel-drafting/dspark/',
 	},
 	markdown: {
 		remarkPlugins: [remarkMath],
