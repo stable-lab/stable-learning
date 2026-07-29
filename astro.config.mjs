@@ -49,6 +49,14 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Image Generation & Diffusion',
+					items: [
+						{ label: 'What Generation Asks For', autogenerate: { directory: 'diffusion/01-the-problem' } },
+						{ label: 'Destroy It, Then Undo It', autogenerate: { directory: 'diffusion/02-diffusion' } },
+						{ label: 'How Stable Diffusion Works', autogenerate: { directory: 'diffusion/03-real-systems' } },
+					],
+				},
+				{
 					label: 'Speculative Decoding',
 					items: [
 						{ label: 'Fundamentals', autogenerate: { directory: 'specdec/01-fundamentals' } },

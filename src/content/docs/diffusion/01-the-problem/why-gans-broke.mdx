@@ -1,0 +1,81 @@
+---
+title: Why the Game Was the Problem
+description: Mode collapse is not a training bug — it is what the objective asks for. The measured difference between an objective that finds one answer and one that finds whichever answer it started nearest.
+sidebar:
+  order: 3
+---
+
+import ModeCoverage from '../../../../components/visualizations/ModeCoverage';
+
+The previous page ended on an observation: the same GAN, the same hyperparameters, a different seed, and the outcome swings from covering all eight modes to covering three. The natural reading is that GAN training is delicate and needs better engineering.
+
+That reading is too kind to the engineering and too harsh on the engineers. **The instability is in the objective, not the optimiser**, and you can see it without any neural network at all.
+
+## An Experiment With No Networks In It
+
+Take a target distribution with three modes. Take a model too simple to fit it — a single Gaussian. It *must* fail; the only question is how. And "how" is decided entirely by the divergence you minimise.
+
+Three candidates:
+
+$$
+\underbrace{\mathrm{KL}(p \parallel q) = \int p \log \frac{p}{q}}_{\text{maximum likelihood}}
+\qquad
+\underbrace{\mathrm{KL}(q \parallel p) = \int q \log \frac{q}{p}}_{\text{reverse}}
+\qquad
+\underbrace{\mathrm{JS}(p, q)}_{\text{what the GAN minimises}}
+$$
+
+The asymmetry is everything, and it is visible directly in the integrals. Forward KL integrates **against $p$**: wherever the data has mass and the model does not, $\log(p/q)$ blows up. Missing a mode is unboundedly expensive. Reverse KL integrates **against $q$**: wherever the model has no mass, it contributes nothing at all, whatever the data is doing there. Ignoring a mode is free.
+
+And the GAN's objective, at an optimal discriminator, is the Jensen–Shannon divergence — which sits between the two, and behaves, as we are about to measure, like the mode-seeking one.
+
+<ModeCoverage client:only="react" />
+
+<div class="viz-caption">
+**What it models.** One Gaussian fitted to a fixed three-mode target, three times over, under the three divergences — all from the same starting point, all by gradient descent. The objectives are computed by direct numerical integration on a 480-point grid, so these are the actual divergences rather than sampled estimates. Each readout counts how many of the three modes fall within two standard deviations of that fit.
+
+**Knobs.** The slider sets where all three fits begin. That is the entire experiment.
+
+**Try this.** Leave the start at 3.0 — near the right-hand mode — and press Run. Forward KL (green) spreads to cover everything; JS (amber) and reverse KL (red) settle onto the right-hand mode and stop, having achieved 1 of 3. Now drag the start to −3.0 and run it again. Forward KL goes to **exactly the same place**. The other two collapse onto the *left* mode instead. Move the start to 0.1 and they take the middle one. Measured across seven starting points, forward KL lands at μ ≈ 0.1, σ = 2.65, covering 3 of 3, **every single time**; JS and reverse KL cover 1 of 3 from −3.6, −3.0, 0.1, 3.0 and 3.6, and each time it is whichever mode they began beside.
+</div>
+
+## The Result, Stated Plainly
+
+**Maximum likelihood has one answer and finds it from anywhere.** The adversarial objective has many answers and takes whichever one it happened to start nearest.
+
+That is the seed variance from the previous page, reproduced with no networks, no Adam, no minibatch noise, and no discriminator. Two independent experiments, one cause. The GAN's 3-to-8-mode swing is not an optimisation artefact that better tuning would remove — it is a two-parameter optimisation problem faithfully finding a local optimum of an objective that has several, and a mode-dropping solution is a perfectly good local optimum that the objective declines to punish.
+
+This is what "mode collapse" actually means. Not a failure to converge — a **successful** convergence to something the loss is content with.
+
+## Three More Differences, Now That the First One Is Clear
+
+**The target moves.** A GAN generator does gradient descent on a loss that is itself being trained. The landscape it is descending is redrawn every step by an adversary. There is no fixed objective anywhere in the system, which is why there is no number you can watch.
+
+Diffusion's loss is a regression onto $\varepsilon$ — a target you generated yourself, that you therefore know exactly, and that will still be the same target tomorrow. If it goes down, the model is better. That is the entire difference, and it is worth more than any architectural trick.
+
+**The signal is far denser.** A discriminator returns one scalar per sample: *fake, 0.7 confidence*. That is the entire gradient signal for a whole image. Diffusion supervises **every pixel, at every noise level** — 576 numbers per training example on our sprites, millions on a real image, and a fresh $t$ drawn each time so one image yields effectively unlimited distinct training targets. Diffusion extracts vastly more supervision from the same dataset.
+
+**Nothing has to be balanced.** GAN training is a two-player game that only works while the players stay matched; every practical GAN paper is partly about maintaining that balance. Diffusion has one network and one loss. There is no equilibrium to lose.
+
+## The Trilemma, and Why Diffusion Chose Differently
+
+The tidiest summary of the pre-2020 landscape is the **generative learning trilemma**: high sample quality, mode coverage, and fast sampling — pick two.
+
+| | quality | coverage | speed |
+|---|---|---|---|
+| **GAN** | ✅ sharp | ❌ drops modes | ✅ one pass |
+| **VAE / flows** | ❌ blurry | ✅ likelihood-trained | ✅ one pass |
+| **Diffusion** | ✅ sharp | ✅ likelihood-ish | ❌ many passes |
+
+Read the VAE row alongside the widget and it stops being a separate fact. VAEs are trained on a likelihood bound — forward KL, mode-covering — so they cover the data and pay for it by spreading mass across regions between modes, which renders as blur. It is the green curve in the figure above: broad, honest, and not committed to anything. The GAN is the red one: sharp, committed, and quietly missing a third of the distribution.
+
+Diffusion's trade is the third row, and its bet was the right one. Sampling speed is an *engineering* problem — you can attack it with better solvers and distillation, and the field did, taking image models from 1000 steps to [one to four](../../02-diffusion/one-step-vs-many/). Mode coverage and training stability are *objective* problems. You cannot engineer your way out of a loss that is content to drop a third of your data.
+
+Which is the whole argument in one line: **diffusion gave up the thing that could be fixed later, and kept the things that could not.**
+
+## References
+
+- Goodfellow et al., *Generative Adversarial Networks.* NeurIPS 2014. [arXiv:1406.2661](https://arxiv.org/abs/1406.2661) — §4.1 derives the JS divergence at an optimal discriminator.
+- Arjovsky & Bottou, *Towards Principled Methods for Training GANs.* ICLR 2017. [arXiv:1701.04862](https://arxiv.org/abs/1701.04862) — why JS is a poor thing to descend when the supports barely overlap.
+- Minka, *Divergence Measures and Message Passing.* MSR-TR-2005-173 — the canonical treatment of mode-seeking versus mode-covering, and the figure this widget reproduces.
+- Xiao, Kreis & Vahdat, *Tackling the Generative Learning Trilemma with Denoising Diffusion GANs.* ICLR 2022. [arXiv:2112.07804](https://arxiv.org/abs/2112.07804) — the trilemma framing and the table above.

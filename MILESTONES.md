@@ -212,5 +212,169 @@ per principle, structured captions, verified references per page.
 
 ---
 
+## M7 — New track: Image Generation & Diffusion
+
+Three chapters under `diffusion/`, placed before the specdec track because
+`specdec/03-parallel-drafting` already leans on diffusion for DFlash and
+assumed the reader knew what it was. House style throughout: tension-first
+prose, a living simulator per idea, structured captions, verified references.
+
+Shared infrastructure — the track needed a rendering primitive the site did
+not have:
+
+- [x] `lib/PixelCanvas.tsx` — canvas-backed image renderer. The site was 100%
+      SVG/Plotly; a 24×24 frame is 576 cells and re-rendering that many React
+      `<rect>`s per frame across four panels spends the frame budget in
+      reconciliation. Grayscale in both themes on purpose (theme-inverting an
+      image makes one sprite read as two different images).
+- [x] `lib/sprites.ts` — eight procedural 24×24 glyphs plus `makeDataset()`
+      for posed variants. No image assets, no licensing, byte-identical for
+      every reader.
+- [x] `lib/diffusionMath.ts` — cosine schedule as a *continuous* function of
+      t/T, forward sampling, the exact closed-form posterior denoiser, and a
+      unified DDIM/DDPM reverse step (η = 1 / η = 0).
+- [x] `lib/spectrum.ts` — radially-averaged power spectrum by separable DFT.
+
+**Colour semantics** follow the existing tokens: policy/blue for the thing
+being predicted, value/amber for x₀, reward/green for ε and for "signal
+surviving", danger/red for noise floors and failure, kl/purple for score and
+entropy.
+
+### Chapter 2 — Destroy It, Then Learn to Undo (`02-diffusion`)
+
+Built first, because it is the payoff chapter and the track ships standalone
+with it.
+
+- [x] `index.mdx` + `MixingReversibility` — ink in water and dye in corn syrup
+      as one simulation with one knob. Both media get identical Taylor–Couette
+      advection (closed form, so cranking back undoes the shear exactly); the
+      only difference is Brownian jitter scaled √dt. Verified: at jitter 0 the
+      dye smears to 6.25 rad of angular spread and returns to displacement
+      **0.0000**; at jitter 0.25/0.5/1.0 the forward half is statistically
+      identical (6.19–6.23 rad) but comes home at 0.19/0.36/0.57.
+      The demo is used as a **contrast, not an analogy** — the syrup unmixes
+      because Stokes flow destroys nothing, whereas our forward process
+      genuinely does. It earns its place by separating "looks destroyed" from
+      "is destroyed", and the page says so explicitly.
+- [x] `forward-process.mdx` + `ForwardNoise` — one t slider, three panels:
+      image dissolving, pixel histogram sliding off its bimodal ink/paper
+      spikes onto 𝒩(0,1), and the power spectrum showing the flat noise floor
+      rising through the falling signal curve. Verified cutoff frequency
+      12 → 6 → 1 → 0 at t = 0/200/700/1000, so "detail dies before silhouette"
+      is measured rather than asserted.
+- [x] `predict-the-noise.mdx` + `ThreeTargets` — the three parameterizations
+      shown to be one object, and separated by error amplification:
+      x₀-pred ×1 flat, ε-pred √(1-ᾱ)/√ᾱ, score-pred (1-ᾱ)/√ᾱ. Verified
+      ε-pred ×0.006/×0.042/×0.17 at t = 1/20/100 and ×6.4/×316 at t = 900/999
+      — so ε-prediction is not uniformly better, it wins hugely where quality
+      is decided and loses where it is not, which is the argument for
+      v-prediction.
+- [x] `one-step-vs-many.mdx` + `StepBudget` — real DDPM/DDIM sampling with the
+      exact denoiser over 128 posed shapes. The T=1 mode-averaging collapse is
+      the lesson, and it is the same failure as `mean-field-trap` (a marginal
+      substituted for a conditional) — cross-linked both ways.
+
+**Measured findings that changed this chapter**, recorded so they are not
+re-litigated:
+
+- The planned claim "sharpness keeps improving from T=1 to T=1000" is **false
+  for an exact denoiser.** Distance-to-nearest-real-image runs 0.50 / 0.063 /
+  0.0032 at T = 1 / 2 / 4 and then sits at 0.0032 through T=200. Growing the
+  training set 8 → 1024 changed nothing; injecting per-call denoiser error
+  (σ = 0.15/0.3/0.6) changed nothing either — it sets a floor ≈ σ at every T.
+  The page now says outright that four steps converges here, and that real
+  systems need more because their denoiser is a *learned approximation* — with
+  DDIM (1000→50) and consistency models (→1–4 steps) as the evidence.
+- A kernel-width knob was built to demonstrate generalization and then
+  **removed**: it does nothing, measured flat at 0.0032 across widths 1–8 and
+  across an effective-noise floor up to 0.4. In 576 dimensions the posterior
+  over a finite training set is effectively deterministic. That failure became
+  the page's argument for why generalization needs a different function class
+  rather than a wider kernel.
+
+### Chapter 1 — What Generation Asks For (`01-the-problem`)
+
+- [x] `index.mdx` + `ManifoldSlice` — the same two endpoints joined by two
+      straight lines: one through all 576 pixels (double-exposure ghosts at
+      the midpoint), one through the four pose parameters the sprites are
+      actually drawn from (valid images throughout). The pose path is a real
+      latent space, not a stand-in, which is why the contrast is honest.
+      Plus uniformly-random pixel frames for scale.
+- [x] `gan.mdx` + `GANDuel` — a genuine GAN: two 2→16→16 MLPs in
+      `lib/tinynn.ts` with hand-written backprop and Adam(β₁=0.5), on the
+      eight-Gaussians benchmark. Nothing scripted.
+- [x] `why-gans-broke.mdx` + `ModeCoverage` — one Gaussian fitted to a
+      three-mode target under forward KL, reverse KL and Jensen–Shannon, by
+      direct numerical integration on a 480-point grid. Closes on the
+      generative trilemma.
+
+**Measured findings that rewrote this chapter:**
+
+- The planned GAN narrative — "crank the discriminator learning rate and watch
+  the generator stall/collapse" — is **false here**. A *stronger* discriminator
+  helps: 4 D-steps at lr 8e-3 gives 6–8 effective modes and 9–15% of mass off
+  the data, versus 3–8 modes and 11–79% off with 1 step at lr 2e-3. With the
+  non-saturating loss a *weak* D is the danger, because a critic that cannot
+  tell real from fake gives the generator nothing to follow. The folk story is
+  about the 2014 minimax loss; the page says so.
+- What *is* reproducible is **seed variance**: over 8 seeds at one fixed
+  config, outcomes range from 3 modes / 79% off-data to 8 modes / 11% off,
+  with the loss curves looking much the same either way. That became the
+  page's thesis, and Reset became its most important control.
+- `ModeCoverage` was going to show "reverse KL locks onto one mode." From the
+  original default start it does **not** — it goes broad and covers 3/3. The
+  real structure, measured over seven starting points: forward KL lands at
+  μ ≈ 0.1, σ = 2.65, covering 3/3 **every time**, while JS and reverse KL end
+  up on whichever mode they started beside (1/3 from −3.6, −3.0, 0.1, 3.0,
+  3.6). So the *start position* became the widget's only knob, and the chapter
+  gained a much better thesis: maximum likelihood has one answer and finds it
+  from anywhere; the adversarial objective has many and takes the nearest.
+  This is the GAN seed variance reproduced with no networks in it.
+
+### Chapter 3 — How Stable Diffusion Works (`03-real-systems`)
+
+- [x] `index.mdx` + `LatentCompress` — a real encoder/decoder: PCA by power
+      iteration (`lib/pca.ts`) over the 256-image dataset, with the residual
+      panel showing exactly what each k discards.
+- [x] `conditioning.mdx` — ε_θ(x_t, t) → ε_θ(x_t, t, c); why a *contrastive*
+      text encoder, cross-attention as the injection mechanism, and why
+      conditioning is a small change here and was a research programme for
+      GANs. Reuses `GuidanceDial` at w = 1.
+- [x] `guidance.mdx` + `GuidanceDial` — real classifier-free guidance,
+      ε_uncond + w(ε_cond − ε_uncond), with both scores computed exactly.
+
+**Measured findings:**
+
+- Guidance steering reproduces exactly: prompt accuracy 25% at w = 0 (near the
+  12.5% chance rate) → **100% for every w ≥ 0.5**. Within-class diversity then
+  decays: over 32 seeds on a fixed prompt, 13 of 16 possible images at w = 1,
+  8 at w = 8 and w = 15, with the most frequent single image rising 16% → 25%.
+- The high-guidance **saturation artifacts do not reproduce** — distance to
+  nearest real image holds at 0.003 from w = 1 through w = 15. With an exact
+  score, extrapolating it is harmless. The artifacts in real systems are the
+  *learned* score's approximation error, amplified by w. Written up as such.
+- PCA is a **weak** encoder for this data and the page says so with numbers:
+  68.6% of variance at k = 16, 92.8% at k = 64, still visibly soft. The cause
+  is that two of the four degrees of freedom are rotation and translation,
+  which are savagely non-linear in pixel space — which is precisely why real
+  latent diffusion uses a convolutional non-linear autoencoder. The widget is
+  presented as a lower bound establishing the *ordering* (semantics cheap,
+  exact rendering expensive), not the achievable ratio.
+
+### The through-line this track ended up with
+
+Three separate pathologies vanish once the denoiser is exact — the thousand
+step count (converges at T=4), generalization-by-kernel-widening (flat at
+0.0032 across every setting), and guidance saturation (0.003 at every w).
+Everything that *survives* in the exact-denoiser toy is mathematical; every
+pathology that disappears was approximation error. That distinction is stated
+explicitly on `guidance.mdx` and is the most useful thing the track teaches.
+
+- Acceptance: `npm run build` clean; both themes checked; every simulator
+  driven to the failure regime its caption claims; numeric claims verified by
+  running the actual library, not by eye.
+
+---
+
 Working agreement: after each milestone increment, run `npm run build`; keep
 checkboxes here current; each iteration should leave the site shippable.

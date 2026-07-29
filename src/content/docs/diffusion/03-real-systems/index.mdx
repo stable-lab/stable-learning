@@ -1,0 +1,67 @@
+---
+title: Latent Diffusion
+description: Why Stable Diffusion denoises a 64×64 code instead of a 512×512 image, and what the autoencoder around it is really for
+sidebar:
+  order: 1
+---
+
+import LatentCompress from '../../../../components/visualizations/LatentCompress';
+
+Everything so far has run in pixel space. That is the honest way to learn the method and a ruinous way to deploy it.
+
+Count the cost. A 512×512 RGB image is 786,432 numbers. Every reverse step pushes all of them through a large network, and there are dozens of steps per image. The first pixel-space diffusion models were extraordinary and almost unusable — DALL·E 2 and Imagen ran on datacentre hardware and generated in the tens of seconds, and no one was running them on a laptop.
+
+Latent diffusion is the change that put image generation on consumer GPUs, and the idea is one sentence: **don't denoise the image, denoise a compressed code of the image.**
+
+## Most Pixels Are Not Carrying Information
+
+The premise is that images are enormously redundant — which is the manifold argument from [chapter 1](../../01-the-problem/) with a practical edge on it. If real images occupy a thin surface inside pixel space, then the coordinates *on that surface* are far fewer than the pixels, and the pixel representation is mostly spending its capacity on correlations you could have predicted.
+
+The way to check is to compress and see what breaks:
+
+<LatentCompress client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A real encoder–decoder pair on the sprite dataset: principal components, fitted here by power iteration. A linear autoencoder trained to convergence learns exactly this subspace, so this is a genuine bottleneck rather than an illustration of one. Left is the original 576 numbers, middle is what survives a round trip through k numbers, right is the residual: precisely what the compression discarded.
+
+**Knobs.** k is the size of the code. The chart tracks cumulative variance captured as k grows.
+
+**Try this.** Start at k = 1 and step up, watching which properties come back in what order. Identity and rough position arrive early — by k = 8 (52.2% of variance, mean reconstruction error 0.441 across the dataset — the readout shows the current image, so it will differ) the shape is recognisable and roughly in the right place, while the crisp edges are not. The *semantics* are cheap; the exact rendering is expensive. Then keep going and notice that it never gets truly clean: at k = 64 this encoder still holds only 92.8% of the variance at mean error 0.181, and the residual panel is still busy. That failure is the next section.
+</div>
+
+## Why This Encoder Is Bad, and Why That Is the Point
+
+The measured numbers above are unimpressive, and it would be easy to quietly not mention them: 68.6% of variance at k = 16, 92.8% at k = 64, with visible softening throughout. If images were as compressible as claimed, a 64-number code should be nearly perfect.
+
+The gap is not evidence against the manifold argument — it is evidence about **what kind of map you need to exploit it.** These sprites have four true degrees of freedom, but two of them are rotation and translation, and those are savagely non-linear in pixel space. Shift a shape two pixels right and *every* pixel changes; there is no small set of fixed directions whose weighted sum expresses "the same shape, moved." A linear encoder is forced to spend component after component approximating a motion that a convolution represents for free.
+
+Which is exactly why real latent diffusion does not use PCA. Stable Diffusion's encoder is a deep convolutional network — translation-equivariant by construction, non-linear, and trained with a perceptual loss so that its errors land where human vision is least sensitive. It achieves at 48× what this linear map cannot manage at 9×.
+
+So read the widget as a lower bound. The claim it establishes is the ordering — semantics come back first, exact rendering last, and the code that captures *what the image is* is far smaller than the code that captures *every pixel of it*. The claim it cannot establish is how good a properly-built encoder gets, because a linear one is the wrong tool for this data and the numbers say so.
+
+## What the Autoencoder Is Actually For
+
+Latent diffusion brackets the whole process between two learned maps: an encoder $\mathcal{E}$ from images to a small code, a decoder $\mathcal{D}$ back. Stable Diffusion's takes 512×512×3 and returns 64×64×4 — **786,432 numbers down to 16,384, a 48× reduction.** Training noises the code, not the image. Sampling denoises a code from scratch and decodes once at the end.
+
+The subtle part is what the two halves are each responsible for, because it is not a simple split of labour:
+
+- **The autoencoder handles perceptual detail** — texture, high-frequency structure, the exact placement of edges. It is trained with a perceptual loss and an adversarial term, and yes, that is a GAN, doing the one job GANs are genuinely excellent at: making a single deterministic output look sharp. Nobody is asking it to model a distribution, so none of [chapter 1's](../why-gans-broke/) objections apply.
+- **The diffusion model handles semantics** — what is in the image, where, in what arrangement. It works entirely in the compressed space and never sees a pixel.
+
+Which is a real division of concerns, not just a speed hack. The 1/f argument from [the forward process](../../02-diffusion/forward-process/) said that noise destroys fine detail almost immediately and coarse structure last, so the vast majority of a pixel-space diffusion model's capacity is spent on frequencies that are decided in the last few steps anyway. Latent diffusion hands that band to a single-pass autoencoder that can do it in one shot, and lets the expensive iterative machinery work only on the part that actually needs iterating.
+
+:::caution[The bottleneck is a ceiling, not just a speedup]
+Nothing the diffusion model does can recover detail the encoder threw away. If the autoencoder cannot represent small text, the system cannot generate small text, no matter how many steps you run or how good the prompt is — which is exactly why early Stable Diffusion was so bad at written words. Push k down to 2 in the widget and the diffusion model working in that space is *strictly* incapable of producing anything the decoder cannot express — 22% of the variance is the whole world it can ever draw from.
+
+That is why the compression is kept mild. 48× sounds aggressive but is deliberately conservative: it is roughly the point where the reconstruction stops being distinguishable, and going further trades capability for speed.
+:::
+
+## What Is Left
+
+We now have a fast conditional-free generator of plausible images. What is missing is the thing everyone actually uses these models for: **saying what you want.** The [next page](../conditioning/) is how a sentence gets into the loop, and the [one after](../guidance/) is the dial that decides how hard the model listens.
+
+## References
+
+- Rombach, Blattmann, Lorenz, Esser & Ommer, *High-Resolution Image Synthesis with Latent Diffusion Models.* CVPR 2022. [arXiv:2112.10752](https://arxiv.org/abs/2112.10752) — the paper Stable Diffusion is built on; §4 covers the autoencoder and the choice of downsampling factor.
+- Esser, Rombach & Ommer, *Taming Transformers for High-Resolution Image Synthesis.* CVPR 2021. [arXiv:2012.09841](https://arxiv.org/abs/2012.09841) — the perceptual + adversarial autoencoder that latent diffusion reuses.
+- Alammar, *The Illustrated Stable Diffusion* (2022). [jalammar.github.io](https://jalammar.github.io/illustrated-stable-diffusion/) — the standard visual walkthrough of how the pieces fit together.

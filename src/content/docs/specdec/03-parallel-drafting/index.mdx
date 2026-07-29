@@ -14,7 +14,7 @@ DFlash's answer: draft the **entire block in a single forward pass** — with a 
 
 ## Why a Diffusion Drafter
 
-Diffusion LLMs generate by iteratively refining a block of masked tokens **in parallel** — all positions at once — rather than left to right. As standalone generators they still trail autoregressive models in quality, which kept them out of production. DFlash's reframe: in a speculative pipeline, *draft quality only sets the acceptance rate*. The lossless acceptance rule from [chapter 1](../01-fundamentals/rejection-sampling/) means a diffusion model's weaknesses cost speed, never correctness — while its parallelism attacks exactly the term ($c$) that the autoregressive drafters cannot. It is the rare case where a technology's flaw is priced at zero and its strength at full value.
+[Diffusion](../../diffusion/02-diffusion/) LLMs generate by iteratively refining a block of masked tokens **in parallel** — all positions at once — rather than left to right. As standalone generators they still trail autoregressive models in quality, which kept them out of production. DFlash's reframe: in a speculative pipeline, *draft quality only sets the acceptance rate*. The lossless acceptance rule from [chapter 1](../01-fundamentals/rejection-sampling/) means a diffusion model's weaknesses cost speed, never correctness — while its parallelism attacks exactly the term ($c$) that the autoregressive drafters cannot. It is the rare case where a technology's flaw is priced at zero and its strength at full value.
 
 So each cycle becomes: one parallel draft pass proposes the block → one target pass verifies it. Two big matmuls, no token-by-token loop on either side.
 

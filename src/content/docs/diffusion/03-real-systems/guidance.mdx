@@ -1,0 +1,80 @@
+---
+title: Guidance — The Dial Everyone Turns
+description: Classifier-free guidance extrapolates away from the unconditional prediction. Why it works, what it costs in diversity, and why the saturation artifacts are an approximation error rather than a law.
+sidebar:
+  order: 3
+---
+
+import GuidanceDial from '../../../../components/visualizations/GuidanceDial';
+
+Conditional sampling works, and it is not enough. Trained honestly on (image, caption) pairs, a diffusion model produces images that are *consistent* with the prompt but often only loosely committed to it — the caption is one influence among many, and the model is free to interpret. Users wanted the prompt obeyed.
+
+The fix is the single most consequential trick in deployed diffusion models, it costs no extra training, and it is one line of arithmetic.
+
+## Extrapolate, Don't Interpolate
+
+The model can produce two predictions for the same noisy image: one with the prompt, one without. The difference between them
+
+$$
+\varepsilon_\theta(x_t, t, c) - \varepsilon_\theta(x_t, t, \varnothing)
+$$
+
+is the direction the prompt is pulling in — the part of the denoising step that exists *because* of the caption. Classifier-free guidance takes that direction and pushes further along it than the model asked:
+
+$$
+\tilde\varepsilon = \varepsilon_\theta(x_t, t, \varnothing) + w\,\big[\varepsilon_\theta(x_t, t, c) - \varepsilon_\theta(x_t, t, \varnothing)\big]
+$$
+
+At $w = 0$ the prompt is discarded. At $w = 1$ this is exactly conditional sampling — the terms cancel to $\varepsilon_\theta(x_t,t,c)$. Above 1 you are **extrapolating past the conditional prediction, away from the unconditional one**, amplifying whatever the caption contributed. Production systems default to $w$ between 5 and 8.
+
+The training cost is almost nothing: randomly drop the caption for ~10% of examples so the same network learns the unconditional prediction too. One network, two modes, no classifier — which is where the name comes from, since the earlier version of this idea needed a separately trained classifier to supply the gradient.
+
+<GuidanceDial client:only="react" />
+
+<div class="viz-caption">
+**What it models.** The guidance formula above, with both scores computed exactly rather than by a network. The conditional score is the closed-form posterior restricted to training images of the requested shape; the unconditional one is the posterior over all 128. The strip collects finished samples so the diversity question can be answered by looking. "On-prompt" counts how many came back as the requested shape; "distinct" counts how many are different images.
+
+**Knobs.** w is the guidance scale — the subject of the page. The prompt buttons change the requested class.
+
+**Try this.** At w = 0 press Run and watch samples arrive from all over the dataset — measured, the requested class shows up 25% of the time, near the 12.5% chance rate. Move to w = 0.5 and it locks on: **100% on-prompt**, and it stays there for every higher setting. Then hunt for the cost. Fix one prompt, run a batch at w = 1, and count distinct images; do it again at w = 8. Measured over 32 seeds on a fixed prompt, the sampler reaches **13 of the 16 possible images at w = 1 and only 8 at w = 8**, with the single most frequent image rising from 16% to 25% of all draws. Obedience is bought with variety.
+</div>
+
+## What It Is Really Doing
+
+The clean way to read the formula is through the score. Since $\varepsilon$ and the score are [the same object](../../02-diffusion/predict-the-noise/), guidance is sampling from a modified distribution:
+
+$$
+\tilde{p}(x \mid c) \;\propto\; p(x)\,\Big[\frac{p(x \mid c)}{p(x)}\Big]^{w} \;\propto\; p(x)\,p(c \mid x)^{w}
+$$
+
+The likelihood term is raised to the power $w$. At $w = 1$ that is Bayes' rule and you are sampling the true conditional. Above 1 you are sampling a distribution **sharpened around the prompt** — mass concentrated where the caption is most strongly satisfied, and stripped from everywhere it is merely satisfied adequately.
+
+That immediately explains both observations. Prompt adherence rises because you are up-weighting exactly the images the caption explains best. Diversity falls because a sharpened distribution is by definition a narrower one, and the images it removes are the unusual interpretations. **This is not a side effect to be engineered away; it is the same operation viewed from the other end.**
+
+## The Artifacts Are Approximation Error
+
+Everyone who has used these models knows the high-guidance look: blown-out contrast, oversaturated colour, a scorched quality that appears somewhere past $w \approx 12$. The natural assumption is that this is what sharpening does at the limit.
+
+It is not, and this widget is a clean demonstration of why. Push $w$ to 15 here and the diversity collapse continues as expected — but the **distance from each sample to the nearest real training image stays at 0.003, unchanged from $w = 1$.** No saturation, no artifacts, no degradation of image quality at all. The samples get less varied and remain perfectly valid images.
+
+The difference is that this page's score is *exact*. Guidance extrapolates along a direction, and extrapolation is only as trustworthy as the thing being extrapolated. A learned $\varepsilon_\theta$ is accurate near the data it was trained on and increasingly wrong as you push away from it; multiply that error by $w = 15$ and the trajectory leaves the region where the network means anything. The burned-out look is the network's approximation error, amplified — not a property of the mathematics.
+
+Which is the same finding this track has now hit three times. The [step count](../../02-diffusion/one-step-vs-many/) collapsed to four steps once the denoiser was exact. Generalization [could not be bought](../../02-diffusion/one-step-vs-many/) by widening a kernel, because an exact posterior memorizes by construction. And guidance artifacts vanish once the score is exact. **Every pathology that survives in this toy is mathematical; every one that disappears was approximation error wearing a costume.** That distinction is worth more than any individual result on this page, because it tells you which problems the field can engineer away and which it cannot.
+
+:::note[Why the default is 7 and not 70]
+Guidance scale is the one knob most users ever touch, and the useful range is narrow. Below ~3 the prompt is a suggestion. Above ~12 the extrapolation outruns the network's accuracy. The commonly shipped 7–8 is empirical: roughly the largest push that stays inside the region where the learned score is still trustworthy. Newer samplers — dynamic thresholding, rescaled guidance — mostly work by *keeping the extrapolated prediction in range*, which is exactly what you would design if you believed the artifacts were approximation error.
+:::
+
+## Where This Track Ends
+
+You can now read a Stable Diffusion model card and know what each part is for. A **VAE** compressing 512×512×3 into a 64×64×4 latent. A **U-Net** predicting noise in that latent at each of ~50 steps. A **CLIP** text encoder producing a vector that reaches every step through cross-attention. A **scheduler** setting the noise levels. A **guidance scale** deciding how hard the prompt is pushed. Every one of those is a page in this track.
+
+And the through-line, if you want one sentence: diffusion won not because it was more powerful than the adversarial game, but because it replaced a moving target with a fixed one. Everything else — the conditioning, the guidance, the latents, the distillation down to four steps — was only buildable on top of a loss that stays still.
+
+## References
+
+- Ho & Salimans, *Classifier-Free Diffusion Guidance.* NeurIPS 2021 Workshop. [arXiv:2207.12598](https://arxiv.org/abs/2207.12598) — the method, the caption-dropout training trick, and the quality/diversity trade-off.
+- Dhariwal & Nichol, *Diffusion Models Beat GANs on Image Synthesis.* NeurIPS 2021. [arXiv:2105.05233](https://arxiv.org/abs/2105.05233) — classifier guidance, the predecessor that needed a separate classifier.
+- Saharia et al., *Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding.* NeurIPS 2022. [arXiv:2205.11487](https://arxiv.org/abs/2205.11487) — dynamic thresholding, introduced specifically to fix high-guidance saturation.
+- Lin et al., *Common Diffusion Noise Schedules and Sample Steps are Flawed.* WACV 2024. [arXiv:2305.08891](https://arxiv.org/abs/2305.08891) — guidance rescaling, and the case that these artifacts are fixable implementation faults rather than inherent.
+- Dieleman, *Guidance: a cheat code for diffusion models* (2022). [sander.ai](https://sander.ai/2022/05/26/guidance.html) — the clearest available explanation of the sharpened-distribution reading.
