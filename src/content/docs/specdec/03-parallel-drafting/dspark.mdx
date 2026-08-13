@@ -15,9 +15,13 @@ DSpark (DeepSeek + PKU, 2026) is built against both problems at once. The first 
 
 ## The Trap: A Product of Marginals
 
-It is tempting to file suffix decay under engineering — later positions are "harder," a bigger drafter will fix it. It won't, because the failure isn't a capacity problem. You can read it straight off the drafter's type signature.
+It is tempting to file suffix decay under engineering — later positions are "harder," a bigger drafter will fix it. It won't, because the failure isn't a capacity problem. It is baked into *when* the drafter computes its numbers, and you can read it straight off the drafter's type signature.
 
-Ask what a fully parallel head at block offset $k$ actually outputs. It has seen the prefix $t_{\le i}$ and nothing else — every position in the block is produced in the same forward pass, so none can see its neighbors. The best any such head can represent is
+Start with the mechanism, because the whole argument falls out of it. DSpark's parallel backbone **is** DFlash, so the draft pass is the one from the last page: an anchor token plus $K$ mask embeddings go in, every block slot attends bidirectionally to its neighbors and to the target's [injected context](../#kv-injection-eagles-trick-upgraded), and one forward emits logits $z_1 \ldots z_K$ for all $K$ slots. Now look at what slot $k$ sees when it attends to slot $k-1$: a **`[MASK]` embedding**. A fixed vector — byte-identical whether this round is about to sample `np` there or `torch`.
+
+So $z_k$ is a deterministic function of the prefix and the injected context, and it is *finished and frozen before a single token of the block is sampled*. There is no edge in the computation graph along which the realized value of $t_{i+k-1}$ could reach $z_k$, because sampling happens strictly after the forward pass that produced it. That is an ordering fact about the architecture, not a statement about capacity or training — a bigger backbone computes a better $z_k$, at the same instant, still knowing nothing about its left neighbor's draw.
+
+Ask, then, what a fully parallel head at block offset $k$ can output. It has seen the prefix $t_{\le i}$ and nothing else. The best any such head can represent is
 
 $$
 p(t_{i+k} \mid t_{\le i}).
@@ -31,9 +35,25 @@ $$
 
 — a **mean-field approximation**, physics' name for replacing a coupled system with a product of independent averages. Every factor on the right can be individually perfect and the product still be wrong. At $K=1$ nothing bad can happen — which is why [the MTP lineage](../mtp/) at $D=1$ never notices. At DFlash's $K=16$, the trap is wide open.
 
+How wrong, exactly, has a closed form. The divergence between the true block joint and the best possible product of its own marginals is
+
+$$
+\mathrm{KL}\!\left(p(t_{i+1:i+K} \mid t_{\le i}) \,\middle\|\, \prod_{k} p(t_{i+k} \mid t_{\le i})\right) \;=\; \mathrm{TC}(t_{i+1}, \ldots, t_{i+K} \mid t_{\le i}),
+$$
+
+the block's **total correlation** (multi-information) — the mutual information shared among the $K$ positions. Read it as an exact accounting statement: what a parallel draft discards is precisely the block's internal dependency, no more and no less. Everything a single position knows about itself survives; everything the positions know about *each other* is gone. That also tells you where the damage concentrates — in text, dependency between adjacent tokens is enormous, so $\mathrm{TC}$ is not a small correction term you can out-train.
+
 ## Marginalization, From Scratch
 
 "Marginalize" is one of those words everyone nods along to, so pin it down: marginalization sums a variable *out* of a joint distribution, $p(B) = \sum_A p(A, B)$. The name is bookkeeping, not metaphor — in a contingency table you sum each row and write the totals in the table's *margin*; that strip of totals is the marginal distribution.
+
+Written out for a block position, what the parallel head hands you is
+
+$$
+p(t_{i+k} \mid t_{\le i}) \;=\; \sum_{t_{i+1:i+k-1}} \underbrace{p(t_{i+1:i+k-1} \mid t_{\le i})}_{\text{summed away}} \cdot \underbrace{p(t_{i+k} \mid t_{\le i},\, t_{i+1:i+k-1})}_{\text{the position you keep}},
+$$
+
+the law of total probability with the in-block prefix as the case split. Delete the sum and the two factors collapse, by the chain rule, into the joint probability of *one specific path* — which is exactly what an autoregressive drafter computes, one factor at a time, walking a single route with the real prefix in the conditioning. The sum is what turns a set of routes into a single number: it adds up every path that ends at $t_{i+k}$ and forgets which one was taken. That forgetting is the entire story of this page.
 
 Make it concrete with the two-token example this page will keep reusing. The prefix is `x = `, and suppose exactly two continuations occur in the wild, each half the time: `np` then `.array`, or `torch` then `.tensor`. The true joint, with its margins written where margins belong:
 
@@ -58,6 +78,18 @@ Here is the sampling-time error, precisely. The chain rule factors the joint *ex
 
 Half the probability mass now sits in cells whose true probability is **zero**. That is where `np.tensor` comes from — not a confused model, but two correct marginals, multiplied. The one-sentence version to keep: **marginalization is a correct operation; the bug is using a marginal *as* a conditional.**
 
+## What's Forced, and What's Merely Trained
+
+Two claims have now been stacked, and they are not equally strong. Worth pulling apart, because only one of them is forced.
+
+The **architectural** claim is forced. All $K$ positions are computed in one pass, before any sampling, so the drafter's block distribution *is* a product of $K$ factors, each conditioned on the prefix alone. No objective, no depth, no masking schedule touches this — it is the ordering argument from the top of the page, and it holds for any drafter that emits a block in a single forward.
+
+The **distributional** claim — that each factor equals the marginal $p(t_{i+k} \mid t_{\le i})$ — is a fact about the *training objective*. Cross-entropy makes it true, for the reason in the note above: one head, two futures in the data, and the loss's optimum for being responsible for both is the frequency-weighted average.
+
+Change the objective and the factor changes. DSpark itself trains with a TV-dominant loss ($\alpha_{tv} = 0.9$ against $\alpha_{ce} = 0.1$), and an $L_1$-flavored objective is minimized by something nearer a pointwise median than a mean: it prefers to **collapse onto the dominant mode** rather than smear between modes. A collapsed factor emits fewer `np.tensor` splices than an averaged one — and pays for it with a wider gap from the target on every prefix whose true continuation was the *other* mode. Acceptance falls either way; only the failure's shape changes.
+
+So the durable statement of the trap is the architectural one: **the positions of a parallel block are mutually independent given the prefix, and the block is sampled from a product.** Whether each factor lands on the marginal, on a collapsed mode, or somewhere between is a knob. That the factors cannot see each other is not.
+
 ## Watch the Mass Land Wrong
 
 <MeanFieldSampler client:only="react" />
@@ -74,7 +106,17 @@ Half the probability mass now sits in cells whose true probability is **zero**. 
 
 The worked example is the failure in miniature: a **multi-modal** continuation — two coherent futures — collides with an independence assumption, and the sample lands *between* the modes, in text no model would ever write. Two positions and one fork already make half of the drafter's samples garbage. Now scale the intuition: real text forks constantly, and the deeper a block position sits, the more unresolved forks stand between it and the prefix — the more predecessors have been marginalized away, the more modes smear together in its marginal. Deeper positions aren't "harder"; their marginals are *flatter*, and a flat marginal loses more often against a sharp conditional in the $\min(1, p/q)$ game.
 
+This is less a new phenomenon than a returning one. Non-autoregressive translation walked into the identical wall in 2018 and named it the **multi-modality problem**: emit a sentence in parallel, and a source with two valid renderings comes back as a splice of both halves. Speculative decoding rebuilt the same architecture for an entirely different reason — latency, not translation — and inherited the same failure, down to the example. `np.tensor` is the Python-flavored version of a non-autoregressive translator rendering *"Thank you."* as *"Danke Dank."* — one word drawn from each of two perfectly good German sentences.
+
 That is exactly the suffix decay DSpark measures on DFlash-style parallel drafts: per-position acceptance decays along the block, from 0.87 at the front to 0.78 at the tail on code, and from 0.72 to 0.63 on chat — while EAGLE-3's autoregressive draft, which never breaks the chain rule, stays stable or even trends upward. The prefix-acceptance semantics from chapter 1 then compound the decay: a position only counts if *everything* before it survived, so a modest per-position slide multiplies into a survival curve whose tail is mostly dead weight — before it's ever verified.
+
+The metric doing the work there is **position-wise conditional acceptance**: the chance position $k$ is accepted *given that everything before it already was*. Subtracting the prefix penalty leaves only the quality of that one position's prediction, and under that lens the two drafter families move in opposite directions. EAGLE-3 **rises** through the block (0.53 → 0.74 on chat) — once the prefix is pinned down, the next token is easier to call, which is exactly what conditioning on real tokens buys. DFlash **falls**, because each step deeper has one more fork marginalized away. Chapter 1's rule supplies the conversion: per-position acceptance is $1 - \tfrac{1}{2}\lVert p^{d}_k - p^{t}_k \rVert_1$, so a TV gap that widens monotonically along the block *is* an acceptance rate that decays monotonically along the block — and prefix verification then multiplies those decaying rates together.
+
+:::note[The surprise: the parallel drafter still wins]
+Decay does not make DFlash the worse drafter. Its acceptance at **position 1** is far *higher* than EAGLE-3's — 0.72 vs 0.53 on chat — because $T_{\text{draft}} = O(1)$ buys the freedom to make the drafter deep, where an autoregressive head pays for every extra layer $K$ times over. And since survival is a running product, position 1 carries more leverage than any other position in the block: its rate multiplies into every term behind it. A drafter that starts high and decays beats one that starts low and climbs, which is precisely the [DFlash table](../#what-it-buys) — same accepted length, much better clock.
+
+So the trap is not "parallel drafting is worse." It is that the **marginal return on block length dies fast**: every extra position is drawn from a flatter factor than the last, so raising $K$ buys less and less accepted length while costing full verify capacity. Fixing the joint is what makes a long block worth drafting at all.
+:::
 
 ## Fix 1: A First-Order Markov Head
 
@@ -85,6 +127,20 @@ $$
 $$
 
 Mechanically: the heavy parallel backbone still produces base logits for all $K$ positions in one pass, exactly like DFlash. Then, before *sampling* position $k$, a featherweight head takes the token actually sampled at $k-1$ and adds a **transition bias** to position $k$'s logits — a low-rank table $B(t_{k-1}, \cdot) = W_1[t_{k-1}]\,W_2$, not a second transformer. In our example: once $+1$ samples `np`, the bias at $+2$ suppresses `.tensor`. The correction is precisely *picking the right row of the contingency table* instead of spraying samples over the whole table — it puts $p(t_2 \mid t_1)$ approximately back where the marginal was standing in for it.
+
+Written out, the repaired per-position distribution is
+
+$$
+p(t_{i+k} = v \mid t_{\le i},\, t_{i+k-1}) \;=\; \frac{\exp\!\big(z_k(v) + B(t_{i+k-1}, v)\big)}{\sum_{u \in V} \exp\!\big(z_k(u) + B(t_{i+k-1}, u)\big)}.
+$$
+
+Two instantiations of $B$. The **Markov head** conditions on $t_{i+k-1}$ alone; a full $V \times V$ transition table is out of the question, so it factorizes low-rank as $B = W_1 W_2$ at rank $r = 256$ — $W_1$ is a lookup (one row per token, $O(r)$ per step), $W_2$ projects back to the vocabulary. The **RNN head** instead carries a recurrent state through the block, accumulating the entire in-block prefix rather than just the last token. Markov is the default and RNN gains only a little, and only on long blocks — the chain-rule-axis result restated: most of the recoverable dependency lives one token back.
+
+:::note[Why the normalization has to be local]
+That denominator is a softmax over the vocabulary at **one position** — not a stylistic choice but the compatibility constraint with [chapter 1](../../01-fundamentals/rejection-sampling/). Rejection sampling needs the exact scalar $p^d_k$ that the drafter assigned to the token it actually drew; approximate is not a category the acceptance test admits.
+
+That requirement is what disqualifies two older non-autoregressive repairs, both of which also bolt a sequential module onto parallel hidden states. A **CRF** layer normalizes *globally* over the whole block: its partition function sums over $V^K$ sequences, and no exact per-token probability falls out of it. A **CTC** drafter marginalizes over latent alignment paths, so a token's probability is itself a sum you can't evaluate exactly — which is why CTC drafters get only greedy verification, lossless with respect to greedy decoding and nothing more. DSpark's escape is its restraint: the sequential module may **shift logits, never renormalize across positions**. The softmax stays exact and local, so the acceptance test stays exact, and losslessness survives a bidirectional block model.
+:::
 
 The key is the price. [EAGLE](../../02-eagle/) also restores the chain rule — by running its draft head autoregressively in feature space, so $K$ tokens cost $K$ small-model forwards on the latency-critical path. DSpark's sequential part is sixteen bias-adds; the backbone runs **once**, in parallel. That asymmetry is why draft length can stretch from 4 to 16 tokens while per-round latency grows by only 0.2–1.3% — and it is DSpark's position on [the chain-rule axis](../mtp/): first-order captures most of the acceptance gain (macro-average accepted length improves 16.3–18.4% over DFlash and 26.7–30.9% over EAGLE-3 across Qwen3 4B/8B/14B), while full autoregression buys a marginal improvement far smaller than its serial cost. The cleanest single piece of evidence: a 2-layer DSpark drafter beats the 5-layer DFlash baseline across all domains. Depth spent on within-block structure outperforms depth spent on a better mean field.
 
@@ -117,6 +173,10 @@ The same economics is why DSpark walks away from tree drafting entirely: a tree 
 
 None of it touches losslessness. Verification is still the target's rejection sampling from [chapter 1](../../01-fundamentals/rejection-sampling/), always performed; scheduling decides how *long*, never *whether*. And the mean-field trap itself only ever cost speed, not correctness — every `np.tensor` the drafter proposed died at the verifier. The bill for a bad joint arrives as rejections, not as text.
 
+:::caution[The one place losslessness is genuinely delicate]
+Scheduling stays safe only while the cut length is chosen **without consulting the tokens whose fate it decides** — the *non-anticipating* condition. DSpark makes that easy to violate by accident, because the confidence head eats the same Markov embedding $W_1[t_{i+k-1}]$ the transition bias uses: the predicted survival $\hat{s}_{k+1}$ is therefore a function of the *realized* token at position $k$. A scheduler that searched a finished block retrospectively for its globally best cut would be letting information from tokens after the cut decide where the cut falls — at which point the emitted distribution is no longer the target's, and the guarantee is gone. The paper works a concrete counterexample in its appendix. Production sidesteps rather than solves it: the window for the current step is computed from a prediction two steps old — which the async pipeline wanted regardless, and which leaves the window independent of everything it gates.
+:::
+
 ## In Production
 
 The numbers that made this paper land: DeepSeek's **V4-Flash serves up to 85% faster** with DSpark enabled — no retraining, no weight changes — and V4-Pro sustains **383.7 tokens/s per request at TP=8** on Blackwell with acceptance length ≈ 5. The SGLang integration ships three verify modes (`static` full-block, `compact` per-request windows — the production path — and `cap-accept` for measuring the acceptance ceiling), packs variable-length verification into **ragged-batch CUDA graphs** to avoid padding waste, and hides the confidence-head relay behind SGLang's async overlap so scheduling adds zero step-time. The scheduling gains concentrate exactly where the model predicts: high batch sizes, where throughput has plateaued and every wasted verify slot is a real request not served.
@@ -129,6 +189,7 @@ Chapter 1: verification is a free lunch (draft anything, lose nothing). EAGLE: m
 
 - Cheng et al. *DSpark: Confidence-Scheduled Speculative Decoding with Semi-Autoregressive Generation.* [arXiv:2607.05147](https://arxiv.org/abs/2607.05147)
 - LMSYS. *DSpark in SGLang: Speculative Decoding with Confidence-Driven, Variable-Length Verification.* [lmsys.org](https://www.lmsys.org/blog/2026-07-06-dspark-sglang)
+- Gu, Bradbury, Xiong, Li, Socher. *Non-Autoregressive Neural Machine Translation.* ICLR 2018. [arXiv:1711.02281](https://arxiv.org/abs/1711.02281) — the multi-modality problem, first diagnosed.
 - Cai et al. *Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads.* ICML 2024. [arXiv:2401.10774](https://arxiv.org/abs/2401.10774)
 - Li, Wei, Zhang, Zhang. *EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty.* ICML 2024. [arXiv:2401.15077](https://arxiv.org/abs/2401.15077)
 - Li, Wei, Zhang, Zhang. *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test.* [arXiv:2503.01840](https://arxiv.org/abs/2503.01840)

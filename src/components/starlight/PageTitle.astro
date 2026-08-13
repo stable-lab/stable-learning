@@ -1,0 +1,17 @@
+---
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<p class="page-byline">Written by Zhongming Yu</p>
+
+<style>
+  .page-byline {
+    margin: 0.6rem 0 0;
+    font-family: var(--serif, Georgia, serif);
+    font-size: 0.95rem;
+    font-style: italic;
+    color: var(--sl-color-gray-3);
+  }
+</style>

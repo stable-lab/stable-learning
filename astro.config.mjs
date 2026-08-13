@@ -23,6 +23,7 @@ export default defineConfig({
 			description: 'Multi-domain learning materials for the lab',
 			components: {
 				Footer: './src/components/starlight/Footer.astro',
+				PageTitle: './src/components/starlight/PageTitle.astro',
 			},
 			customCss: [
 				'@fontsource-variable/inter',

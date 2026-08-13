@@ -170,6 +170,19 @@ living simulator per chapter, structured captions, references per page.
       bias sweep; confidence head → load-aware scheduler → red verify-window
       cut), `MTPModules` (parallel heads vs V3's sequential module,
       side by side).
+- [x] First principles behind the parallel-drafter trap (DSpark page): the
+      mechanism (`[MASK]` neighbors ⇒ all K logit vectors frozen *before*
+      sampling — an ordering fact, not a capacity one), KL(joint ‖ product) =
+      block total correlation, "What's Forced, and What's Merely Trained"
+      (architecture forces independence; the loss picks the factor — CE→marginal
+      vs DSpark's TV-dominant α=0.9→mode collapse), NAT multi-modality lineage
+      (Gu et al. 2018), position-wise conditional acceptance via
+      α = 1 − ½‖p^d−p^t‖₁ (EAGLE-3 rises 0.53→0.74, DFlash decays) plus the
+      surprise that DFlash still wins on position-1 leverage, the
+      local-normalization constraint (why CRF-NAT/CTC drafters can't do exact
+      rejection sampling and DSpark can), Markov r=256 vs RNN head, and the
+      non-anticipating caveat (confidence head reads W₁[t_{k−1}]; async
+      two-step-old window keeps scheduling lossless).
 
 ---
 
@@ -207,7 +220,9 @@ per principle, structured captions, verified references per page.
       marginal edge bracketed; baseline error in the prose caught and
       fixed) + `MentalHealthRates` (Evans 41/39% vs 6% with the
       convenience-sample caveat; Levecque 32% vs 14% GHQ4+).
-- [x] Site-wide author byline in the footer: Written by Zhongming Yu.
+- [x] Site-wide author byline: Written by Zhongming Yu — `PageTitle` override,
+      italic serif line directly under each page's h1 (moved up from the footer,
+      which keeps logo + copyright).
 - Acceptance: `npm run build` clean; both themes OK; references verified.
 
 ---
