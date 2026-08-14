@@ -1,0 +1,76 @@
+---
+title: Why One Big Step Fails
+description: A single jump from noise to image returns the average of every answer at once — and why the step counts real systems use are about approximation, not arithmetic
+sidebar:
+  order: 4
+---
+
+import StepBudget from '../../../../components/visualizations/StepBudget';
+
+We have a forward process that ends in a Gaussian and a network that predicts the noise. The obvious question is why we cannot simply run it once. Draw $x_T \sim \mathcal{N}(0,\mathbf{I})$, ask the network for the noise, subtract it, and collect the image. One forward pass — as fast as a GAN, with none of the adversarial machinery.
+
+Try it and you get a gray smudge. Not a bad image: **the average of all of them**, every time, no matter what noise you start from. The reason is the most important idea on this page, and it is not a limitation of neural networks.
+
+## The Model Is Not Allowed to Pick
+
+Recall what the network is trained to output. It is fit with a squared-error loss, and squared error has exactly one minimizer: the **conditional mean**. Whatever the network is asked, it answers with the average of every value consistent with its input. That was harmless everywhere it appeared before now, because it was what we wanted.
+
+At $t = T$ it stops being harmless. The input is pure noise and carries no information about the destination, so *every* image in the training distribution is equally consistent with it. The conditional mean of "every image at once" is the dataset average, and the dataset average of a pile of distinct shapes is a centered blur. The network is not failing. It is answering correctly, and the correct answer is useless.
+
+$$
+\mathbb{E}[x_0 \mid x_T] = \sum_i p(x^{(i)} \mid x_T)\, x^{(i)} \;\longrightarrow\; \frac{1}{N}\sum_i x^{(i)} \quad\text{as } \bar\alpha_T \to 0
+$$
+
+This is the same failure the [mean-field trap](../../../specdec/03-parallel-drafting/dspark/#the-trap-a-product-of-marginals) describes for parallel token drafting, and it is worth seeing that it is literally the same failure. There, a drafter samples each position from its marginal and lands between two coherent futures, producing `np.tensor` — text no model would ever write. Here, a one-step sampler averages over every plausible image and lands between them, producing a shape no dataset ever contained. In both cases the individual quantity is computed *correctly*; the error is using an average where a commitment was required.
+
+<StepBudget client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Real reverse sampling, run at a step budget you choose, against a training set of 128 shapes at random positions, sizes and angles. The denoiser is not a neural network and not an approximation — with a finite training set the posterior over "which image is this?" is a softmax and its mean is a closed form, so this is the *optimal* denoiser, computed exactly. Left panel: $x_t$, the chain's current state, beside $\hat{x}_0$, its best guess at the clean image. Right: the largest posterior weights, with the red dashed line marking where they would sit if all 128 were equally likely, and the entropy of that posterior across the run — 7 bits is total ignorance, 0 bits is certainty.
+
+**Knobs.** T is the step budget. The sampler switch is η: DDPM injects fresh noise at every step, DDIM is fully deterministic — with an exact denoiser you can watch both land in the same place.
+
+**Try this.** Start at T = 1 and look before you step: the posterior bars sit flat on the red line, entropy reads the full 7 bits, and $\hat{x}_0$ is a symmetric smudge — the average of all 128 shapes. Press Step and that smudge *is* the finished sample. Now switch to T = 2 and step twice: the first step commits to a region of the dataset, the second resolves it, and a real shape drops out. Watch the entropy trace fall from 7 bits toward 0 as it goes — that fall is the generation. Then walk T up through 4, 16 and 200 and watch the improvement stop: by T = 4 the output is already a clean shape, and everything past that changes nothing. The next section is about why.
+</div>
+
+## The Fix, and Why It Works
+
+The escape is to never ask the impossible question. Instead of jumping from $t = T$ to $t = 0$, take a step so small that the posterior barely has room to be ambiguous.
+
+The formal statement behind this is due to Feller: for a diffusion with sufficiently small steps, **the reverse conditional has the same functional form as the forward one.** If $q(x_t \mid x_{t-1})$ is Gaussian and $\beta_t$ is small, then $q(x_{t-1} \mid x_t)$ is Gaussian too. That is the entire licence for the method. A Gaussian is fixed by its mean, the mean is what squared-error training gives you for free, and so a network that can only ever produce conditional means is nevertheless exactly the right tool — provided you only ever ask it about small steps.
+
+Take one big step and that guarantee evaporates. The true $q(x_0 \mid x_T)$ is as multimodal as the data itself, and a Gaussian fitted to it can only straddle the modes. Take a thousand small ones and every individual question is one the model can answer honestly.
+
+## An Honest Reading of the Step Count
+
+Here is where this widget will mislead you if you let it, so let us be direct about what it shows.
+
+Sweep T upward and the improvement stops almost immediately. Measured over sixteen seeds on exactly the configuration above, mean distance from the finished sample to the nearest real training image goes **0.50 at T=1, 0.063 at T=2, 0.0032 at T=4 — and then sits at 0.0032 through T=200.** By the blur measure it is the same story: 42% of pixels stranded in the midtones at T=1 against 4.9% for a real training image, and 6.6% by T=4. Enlarging the training set from 8 images to 1024 does not move those numbers. Four steps is converged.
+
+That is not what production systems do. Stable Diffusion shipped at 50 steps; the original DDPM paper used 1000. So either they were wasting 99.6% of their compute, or this toy is missing something. It is missing something, and naming it precisely is more useful than hiding it:
+
+**The step count buys accuracy in the denoiser, not correctness in the mathematics.** Our denoiser is exact — it has the training set in hand and computes the true posterior in closed form. Given an exact denoiser, the reverse process is a well-conditioned integration problem and a handful of steps solves it. A real denoiser is a network approximating that posterior over a distribution incomparably richer than 128 shapes, and it is wrong by a little every time it is called. Small steps keep each individual query inside the region where the network is accurate, and keep any single error from steering the whole trajectory.
+
+The best evidence that this reading is right is what happened next. If a thousand steps were mathematically required, no amount of engineering could have removed them. Instead, DDIM cut 1000 to 50 by changing only the sampler, and consistency and distillation methods have since pushed image models to **one to four steps** — landing almost exactly where this exact-denoiser toy says the arithmetic allows. The step count was always a tax on approximation error, and the field spent three years paying it down.
+
+:::note[What this widget cannot show you]
+Because its denoiser is exact rather than learned, this simulator demonstrates the one-step failure faithfully and the thousand-step *necessity* not at all. The blur at T=1 is real and it is the point. The flatness after T=4 is an artifact of having an exact posterior, and it is reported here rather than papered over.
+:::
+
+## The Other Thing This Denoiser Reveals
+
+Look at the gallery of finished samples. Every one is a training image, reproduced pixel for pixel — the measured distance is 0.0032, which is zero plus floating-point dust. That is not a bug in the sampler. It is what an *exact* empirical posterior must do: the distribution it was handed is 128 delta spikes, so the only thing it can possibly sample is one of those 128 spikes. It has perfectly memorized its training set and learned nothing else.
+
+The instinct is that this is a sharpness problem — blur the posterior a little and the model should start producing shapes between the training images. It does not work, and the reason is worth more than the fix would have been. Widening the kernel by a factor of eight, and separately flooring the denoiser's effective noise level, both leave the distance at **0.0032, unchanged to four decimals.** In 576 dimensions the squared distance from a noisy image to the *wrong* training image runs to the hundreds, so the softmax saturates no matter how much you divide it down. Smoothing delays the collapse onto a single training image; it never prevents it.
+
+Which is the actual argument for the neural network, and it is not about scale or speed. **Generalization is not a knob you can turn on an exact posterior — it requires a different function class.** A network cannot represent 128 delta spikes; it has finite capacity, so it is forced to interpolate between the training points, and that forced interpolation *is* the generalization. The approximation is not a compromise we accept for tractability. It is the only reason the model produces anything new.
+
+It is also, uncomfortably, why real diffusion models sometimes reproduce training data verbatim. Memorization is not an exotic failure bolted onto the method; it is the method's exact solution, and everything that makes a model creative is the network failing, productively, to reach it.
+
+## References
+
+- Sohl-Dickstein et al., *Deep Unsupervised Learning using Nonequilibrium Thermodynamics.* ICML 2015. [arXiv:1503.03585](https://arxiv.org/abs/1503.03585) — invokes Feller's result that small-step diffusions have reverse processes of the same functional form.
+- Ho, Jain & Abbeel, *Denoising Diffusion Probabilistic Models.* NeurIPS 2020. [arXiv:2006.11239](https://arxiv.org/abs/2006.11239) — the 1000-step ancestral sampler.
+- Song, Meng & Ermon, *Denoising Diffusion Implicit Models.* ICLR 2021. [arXiv:2010.02502](https://arxiv.org/abs/2010.02502) — the η parameterization used by the sampler switch; 1000 steps to 50 without retraining.
+- Song et al., *Consistency Models.* ICML 2023. [arXiv:2303.01469](https://arxiv.org/abs/2303.01469) — one- and few-step generation, the evidence that the step count was approximation error rather than arithmetic.
+- Carlini et al., *Extracting Training Data from Diffusion Models.* USENIX Security 2023. [arXiv:2301.13188](https://arxiv.org/abs/2301.13188) — memorization in deployed models.

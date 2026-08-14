@@ -1,0 +1,75 @@
+---
+title: Before Diffusion, the GAN
+description: A counterfeiter, a detective, and the most exciting idea in generative modelling for six years — running live, including the part where identical settings give different answers
+sidebar:
+  order: 2
+---
+
+import GANDuel from '../../../../components/visualizations/GANDuel';
+
+We need a network that maps simple noise onto the image manifold. The obstacle is training it: we cannot write down a loss, because we have no formula for "how much does this look like a real image."
+
+In 2014 Ian Goodfellow proposed skipping the formula entirely. **If you cannot write the loss, learn it.** Train a second network whose only job is to tell real images from generated ones, and use *its* opinion as the first network's loss. The generator is a counterfeiter, the discriminator is a detective, and they improve by trying to beat each other.
+
+It is one of the genuinely beautiful ideas in machine learning, and for about six years it was the only thing that worked.
+
+## The Game
+
+Two networks, opposite objectives:
+
+$$
+\min_G \max_D \; \mathbb{E}_{x \sim p_\text{data}}[\log D(x)] + \mathbb{E}_{z \sim \mathcal{N}}[\log(1 - D(G(z)))]
+$$
+
+$D$ maximises: get real images right, get fakes right. $G$ minimises the second term: make $D$ wrong about fakes. At the theoretical optimum $D$ can do no better than a coin flip, and $G$ has matched the data distribution exactly.
+
+The appeal was not only elegance. A GAN generates in **one forward pass** — noise in, image out — which was and remains far faster than anything on the diffusion side. And because nothing forces the generator to explain the data, only to fool a critic, GAN samples were *sharp* at a time when everything else was blurry.
+
+Here is one, actually training. Two 2→16→16 networks, real backprop, real Adam:
+
+<GANDuel client:only="react" />
+
+<div class="viz-caption">
+**What it models.** A genuine GAN on the standard eight-Gaussians benchmark — nothing scripted, every blue dot is the current generator's real output. Grey is real data, the eight circles are the target modes. "Modes covered" counts how many hold more than 2% of the generator's mass, so a mode with a token handful of samples does not count. "Mass off the data" is the fraction of samples landing outside every mode.
+
+**Knobs.** Discriminator strength switches between one update per generator step and four stronger ones. The loss switch chooses the original 2014 minimax objective or the non-saturating variant everyone actually uses. Reset draws a new seed and starts over.
+
+**Try this.** Press Run at the defaults and watch it work — the blue cloud usually finds all eight modes within a couple of thousand iterations, which is the point: **GANs are not broken, they mostly work.** Then press Reset and run it again. And again. Over eight seeds at these exact settings, the measured outcome ranges from **3 modes covered with 79% of mass off the data** to **8 modes with 11% off**, with nothing changed but the random seed. Now watch the two loss curves while you do it. They look about the same on the good runs and the bad ones.
+</div>
+
+## What the Loss Curves Are Not Telling You
+
+That last observation is the one to carry forward, and it is worth being precise about why it happens rather than filing it under "GANs are finicky."
+
+In ordinary supervised learning the loss is a **progress measure**. It goes down, the model is better; it plateaus, you are done. You can watch a number and know how the run is going.
+
+A GAN loss is not a progress measure, and cannot be. It is the score in a game between two players who are both still learning. If the discriminator loss rises, that might mean the generator improved — or that the discriminator got worse. If it falls, the generator may be failing, or the discriminator may have found a new tell that the generator will shortly patch. **The number moves for two unrelated reasons and gives you no way to separate them.** A GAN at equilibrium and a GAN whose two networks are both incompetent produce similar-looking curves.
+
+This is not a subtlety anyone missed; it is the central motivation of the Wasserstein GAN paper, whose selling point was a loss that actually correlates with sample quality. It also explains why GAN papers of that era are full of grids of hand-picked samples: looking at the pictures was, genuinely, the evaluation method.
+
+:::note[The discriminator is not the enemy]
+Folk wisdom says a GAN fails when the discriminator gets *too good* — it wins, gradients vanish, the generator starves. That story is about the **original 2014 minimax loss**, where the generator's gradient really does vanish once $D$ is confident.
+
+It is not what this widget measures. Switching to four stronger discriminator steps *tightens* the spread rather than causing collapse: 6–8 modes covered and 9–15% of mass off the data, against 3–8 modes and 11–79% with the weak discriminator. With the non-saturating loss — which is what Goodfellow proposed as the fix, and what everyone uses — a weak discriminator is the greater danger, because a critic that cannot tell real from fake gives the generator no signal worth following.
+:::
+
+## What It Cost
+
+Everything above is the *good* version of the story. What sank GANs at scale was not any single failure but the accumulation:
+
+**They are unstable in a way you cannot monitor.** Not "sometimes need tuning" — you cannot tell from the training curves whether the run you are watching is one of the good ones.
+
+**They drop parts of the data.** Mode collapse, in the small: the generator finds a region the discriminator is currently bad at and piles its mass there. In the large: a face model that never generates certain kinds of faces, discovered by a user rather than a metric.
+
+**Adding capacity does not reliably help.** Bigger models made classifiers better on a predictable curve. Bigger GANs got harder to balance. That mattered enormously in the years when scaling turned out to be the field's main lever.
+
+None of that is fatal on its own; a great deal of engineering went into managing all three. What ended the era was something else arriving that did not need managing — where the loss is a plain regression, the target is known exactly, and the same run twice gives you the same model.
+
+The [next page](../why-gans-broke/) takes the deepest of these — dropping parts of the data — and shows it is not a training bug at all. It is what the objective *asks for*.
+
+## References
+
+- Goodfellow et al., *Generative Adversarial Networks.* NeurIPS 2014. [arXiv:1406.2661](https://arxiv.org/abs/1406.2661) — the original game, and the non-saturating loss fix in §3.
+- Arjovsky, Chintala & Bottou, *Wasserstein GAN.* ICML 2017. [arXiv:1701.07875](https://arxiv.org/abs/1701.07875) — the argument that the GAN loss does not track sample quality, and a loss that does.
+- Metz et al., *Unrolled Generative Adversarial Networks.* ICLR 2017. [arXiv:1611.02163](https://arxiv.org/abs/1611.02163) — the eight-Gaussians benchmark used here, and mode collapse as cycling.
+- Dhariwal & Nichol, *Diffusion Models Beat GANs on Image Synthesis.* NeurIPS 2021. [arXiv:2105.05233](https://arxiv.org/abs/2105.05233) — the paper whose title marks the end of the period.

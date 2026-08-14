@@ -1,0 +1,56 @@
+---
+title: What Generation Actually Asks For
+description: Why an image is a point in a 576-dimensional space, why almost none of that space is images, and why that single fact shapes every generative model
+sidebar:
+  order: 1
+---
+
+import ManifoldSlice from '../../../../components/visualizations/ManifoldSlice';
+
+Ask someone what it would take to generate an image and the honest first answer is: pick some numbers. A 24×24 grayscale picture is 576 numbers. A 512×512 colour photograph is 786,432. Generation is choosing values for all of them at once.
+
+Put that way it sounds like the problem should already be solved, because picking numbers is easy. The difficulty is entirely in *which* numbers, and the shape of that difficulty is the thing worth internalising before any method is discussed. It is the reason generative modelling is hard, and it is the reason all the methods that work look strange.
+
+## Almost Nothing Is an Image
+
+Take the 576-number version and start choosing at random. You will get static — every time, without exception, for as long as you care to run it. Not "usually static", not "static with occasional faint structure". The set of real images is so vanishingly thin inside that space that random search is not a slow method for finding one, it is not a method at all.
+
+The images that mean something occupy a **manifold**: a low-dimensional, curved, connected surface inside the ambient space. Our sprites have 576 pixels but only about four real degrees of freedom — which shape, where, how big, at what angle. Everything else is determined. Real photographs are the same story with bigger numbers: millions of pixels, but far fewer independent knobs, because pixels in a photograph are ferociously correlated. Neighbouring pixels are usually similar; lighting is consistent; objects are opaque and have edges.
+
+So "generate an image" means: **produce a point on a surface you cannot write down, that occupies effectively none of the space it lives in, and that you only know through examples.** Every generative model in this track is an attempt to get onto that surface.
+
+<ManifoldSlice client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Two routes between the same two images. The top strip walks a straight line through all 576 pixel values — the obvious thing, and the thing that fails. The bottom strip walks a straight line through the four pose parameters the images were actually generated from, re-rendering at every step. That second path is a genuine latent space rather than a stand-in: these sprites really are drawn from those four numbers. The readouts measure, for the current position, the distance to the nearest of 256 reference images. Read the *gap*, not the absolute number: the reference set is finite, so even a perfectly valid pose it happens not to contain scores around 0.2, while a pixel-space ghost scores around 0.53.
+
+**Knobs.** λ moves along both paths at once; the shape buttons change the endpoints.
+
+**Try this.** Set λ to the middle and compare the two rows. The pixel path shows a **double exposure** — both shapes faintly present, neither of them real, a picture no camera and no renderer would ever produce. The pose path shows a perfectly ordinary shape at every step. Both paths connect the same two endpoints, and both are straight lines; they just live in different spaces. Then look at the three random-pixel frames at the bottom, which is what the overwhelming majority of that 576-dimensional space actually looks like.
+</div>
+
+## The Straight Line Is the Whole Problem
+
+The two rows above are the same idea told twice. Average two images pixelwise and you get a ghost, because **the manifold is curved and the straight line between two points on it leaves it immediately**. Average their *poses* and you stay on it, because in that parameterization the manifold is flat by construction.
+
+This is why "just interpolate the training data" is not a generative model, and it is why the interesting question in this field has always been *what coordinates to work in*. A model that has learned good coordinates makes generation easy — sample coordinates, decode, done. A model working in raw pixels has to somehow avoid the overwhelming majority of its own output space.
+
+Every method in this track is a different answer to that:
+
+- **GANs** learn a decoder directly: a network mapping simple noise onto the manifold, trained by a second network whose job is to notice when it lands off. That is the [next page](../gan/).
+- **VAEs** learn an encoder and a decoder together, and pay for it with blurry samples — a cost the [mode-coverage page](../why-gans-broke/) will explain in the same terms as everything else.
+- **Diffusion** does something stranger. It refuses to learn coordinates at all, works in raw pixel space the whole way, and instead learns a *direction field* pointing back toward the manifold from every point outside it. That sounds much worse and turned out to be much better.
+
+## What Makes This Different From Classification
+
+One more framing, because it explains why generation stayed hard long after recognition got easy.
+
+A classifier maps a huge input to a small output — 786,432 numbers in, one label out. It is allowed to throw away almost everything, and mostly what it learns is *what to ignore*. Generation runs the other way: a handful of numbers in, 786,432 out, every one of which has to be right, and jointly right. Get the pixels individually plausible but jointly inconsistent and you have not made a slightly flawed image, you have made an obvious fake.
+
+That "jointly" is where the difficulty concentrates, and it is worth naming now because it is the same difficulty that will reappear as **mode collapse** in GANs, as **blur** in one-step diffusion, and — in a different track entirely — as the [mean-field trap](../../../specdec/03-parallel-drafting/dspark/#the-trap-a-product-of-marginals) in parallel token drafting. Three fields, three names, one problem: getting each part right individually is not the same as getting them right together.
+
+## References
+
+- Bengio, Courville & Vincent, *Representation Learning: A Review and New Perspectives.* IEEE TPAMI 2013. [arXiv:1206.5538](https://arxiv.org/abs/1206.5538) — the manifold hypothesis and why good coordinates are the whole game.
+- Goodfellow, Bengio & Courville, *Deep Learning*, ch. 20 — generative models and the dimensionality argument sketched above.
+- Fefferman, Mitter & Narayanan, *Testing the Manifold Hypothesis.* J. Amer. Math. Soc. 2016. [arXiv:1310.0425](https://arxiv.org/abs/1310.0425) — what it would take to actually verify the claim, rather than assume it.

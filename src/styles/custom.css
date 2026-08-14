@@ -331,6 +331,128 @@
 	animation: viz-pulse 1.1s ease-in-out infinite;
 }
 
+/* Canvas-rendered images (diffusion track). The frame follows the theme; the
+   pixels inside deliberately do not — see lib/PixelCanvas.tsx. */
+.viz-pixel {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.viz-pixel-canvas {
+	display: block;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 4px;
+	background: #000;
+	image-rendering: pixelated;
+	max-width: 100%;
+}
+
+.viz-pixel-label {
+	font-size: 0.72rem;
+	color: var(--sl-color-gray-3);
+	text-align: center;
+	line-height: 1.3;
+}
+
+/* Thumbnail picker for choosing which training image to work on. */
+.viz-sprite-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin-top: 0.5rem;
+	justify-content: center;
+}
+
+.viz-sprite-btn {
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: none;
+	padding: 2px;
+	cursor: pointer;
+	line-height: 0;
+}
+.viz-sprite-btn:hover {
+	border-color: var(--sl-color-gray-4);
+}
+.viz-sprite-btn.active {
+	border-color: var(--sl-color-accent);
+}
+
+/* Row of side-by-side panels inside a widget; wraps on narrow screens. */
+.viz-panels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.9rem;
+	align-items: flex-start;
+	justify-content: center;
+}
+
+.viz-panel {
+	flex: 1 1 11rem;
+	min-width: 0;
+}
+
+/* Charts inside a panel cap their width so a wide container doesn't stretch
+   them into oversized boxes (the viewBox aspect would scale height with it). */
+.viz-panel-chart {
+	width: 100%;
+	max-width: 22rem;
+	height: auto;
+}
+
+/* Horizontal strip of frames, e.g. steps along an interpolation path. */
+.viz-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	align-items: flex-start;
+	margin-top: 0.3rem;
+}
+
+/* Wrapping row of controls under a widget body. */
+.viz-controls-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem 1.1rem;
+	align-items: flex-end;
+	margin-top: 0.7rem;
+}
+
+.viz-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.15rem 0.7rem;
+	margin-top: 0.2rem;
+	font-size: 0.7rem;
+	color: var(--sl-color-gray-3);
+	line-height: 1.35;
+}
+.viz-legend span {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.28rem;
+	white-space: nowrap;
+}
+.viz-legend i {
+	width: 0.85rem;
+	height: 0;
+	border-top-width: 2px;
+	border-top-style: solid;
+	flex: none;
+}
+
+.viz-panel-title {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--sl-color-gray-3);
+	margin-bottom: 0.3rem;
+}
+
 /* Structured figure captions (What it models / Knobs / Try this) */
 .viz-caption {
 	margin: -0.75rem 0 1.75rem;

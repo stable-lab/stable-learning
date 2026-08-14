@@ -1,0 +1,75 @@
+---
+title: The Forward Process
+description: Why the destruction step is Gaussian, why that buys a closed-form jump to any noise level, and why fine detail always dies before coarse structure
+sidebar:
+  order: 2
+---
+
+import ForwardNoise from '../../../../components/visualizations/ForwardNoise';
+
+We are stuck with a distribution we cannot touch. $p(\text{image})$ is not something anyone can write down, normalize, or sample. But there is exactly one distribution in this business that we *can* sample, trivially, a billion times a second: the standard Gaussian. So the plan writes itself, and it is the only plan in generative modeling that does not require knowing $p$ at all — **build a path from the image distribution to the Gaussian, then learn to walk it backwards.** Everything else on this page is about making that path cheap enough to be useful.
+
+## Why Gaussian, Specifically
+
+The forward path is a chain of tiny corruptions. At each step we shrink the image slightly toward zero and mix in a little fresh noise:
+
+$$
+q(x_t \mid x_{t-1}) = \mathcal{N}\big(x_t;\ \sqrt{1-\beta_t}\,x_{t-1},\ \beta_t \mathbf{I}\big)
+$$
+
+You could destroy an image many other ways — blur it, mask it, quantize it. Gaussian noise is chosen for a property none of those have: **Gaussians are closed under addition.** Add two Gaussians and you get a Gaussian, with variances that simply sum. Chain a thousand of these steps and the composition collapses into a single one:
+
+$$
+x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\varepsilon,
+\qquad \varepsilon \sim \mathcal{N}(0, \mathbf{I}),
+\qquad \bar\alpha_t = \prod_{i \le t}(1-\beta_i)
+$$
+
+Read that as an accounting identity and the whole design falls out of it. $\bar\alpha_t$ is how much of the original image is left; $1 - \bar\alpha_t$ is how much noise has taken its place. They sum to one, so the total variance never drifts.
+
+The payoff is not elegance, it is **cost**. To train on the noise level $t = 700$ you do not simulate seven hundred steps. You draw one $\varepsilon$, evaluate one line of arithmetic, and land exactly where a seven-hundred-step simulation would have put you — with the correct distribution, not an approximation of it. Training samples $t$ uniformly at random and jumps straight there every time. A forward process built from blurring or masking has no such closed form, and every training example would cost a full simulation. This one property is why the method is affordable.
+
+:::note[The schedule is a design choice, not a law]
+$\beta_t$ is set by hand — how fast to destroy. Early work used a linear ramp; the cosine schedule used here (Nichol & Dhariwal) spends far more steps in the middle range where the image is half-visible, because that is where nearly all the learnable signal lives. Both ends are cheap: near $t=0$ there is nothing to do, and near $t=T$ there is nothing left to do it to.
+:::
+
+## The Endpoint Is the Whole Point
+
+Push $\bar\alpha_t$ to zero and the identity above reads $x_T = \varepsilon$. Not "approximately noise" — the image term is gone, and what remains is a draw from $\mathcal{N}(0,\mathbf{I})$ that carries no information about where it started. Every image in the dataset, every image that could ever exist, funnels into the same featureless Gaussian.
+
+That sounds like pure loss, and forward it is. Backward it is the entire trick. The reverse process has to start *somewhere*, and "somewhere" has to be a distribution we can draw from without already knowing the answer. The forward process is engineered to end at the one distribution that qualifies. We destroy the data into a Gaussian because a Gaussian is the only thing we know how to conjure from nothing.
+
+Watch all three consequences at once — the image dissolving, the pixel histogram sliding onto the unit Gaussian, and the frequency content going out:
+
+<ForwardNoise client:only="react" />
+
+<div class="viz-caption">
+**What it models.** One image being noised by the closed-form jump above, with $\varepsilon$ drawn once and held fixed so the slider mixes in *the same* noise at increasing strength rather than reshuffling it. Left: $x_0$ beside $x_t$. Middle: the histogram of pixel values against $\mathcal{N}(0,1)$ in red — at $t=0$ the pixels are bimodal, piled at ink and paper, which is emphatically not a Gaussian; by $t=T$ they have slid onto the red curve exactly. Right: power per spatial frequency, coarse structure on the left and fine detail on the right. The dashed gray line is the clean image's spectrum, green is what survives ($\bar\alpha$ times it), the flat red line is the noise floor $n^2(1-\bar\alpha)$, and blue is what is actually measured in $x_t$. Where green drops under red, detail is gone; the shaded region is everything already lost.
+
+**Knobs.** The $t$ slider is the noise level. Run sweeps it up and back down so you can watch the crossing move. The thumbnails swap which training image is being destroyed; Reset draws a fresh $\varepsilon$.
+
+**Try this.** Drag $t$ slowly from 0 and watch the red noise floor rise as a flat line while the green signal curve sinks as a whole — they cross on the *right* first, and the crossing sweeps leftward. That is the claim worth taking away: noise is flat across frequencies, real images are not, so detail is never lost uniformly. Fine texture dies at $t \approx 200$ while the silhouette is still standing at $t \approx 700$. Now watch the middle panel over the same range: the two spikes of the ink/paper histogram melt into a single bell. By $t = 1000$ the readout says 0% detail surviving and the histogram sits exactly on $\mathcal{N}(0,1)$ — which is precisely the state the reverse process will have to start from.
+</div>
+
+## Detail Dies First, and That Is Not an Accident
+
+The right-hand panel is doing more work than it looks. It explains something you have seen with your own eyes every time a diffusion model generates: the image does not fade in uniformly, it **resolves** — a blurry blob becomes a shape becomes a face becomes eyelashes.
+
+The reason is a mismatch between two spectra. Gaussian noise is *white*: equal power at every spatial frequency, a flat line. Natural images are the opposite — their power falls off roughly as $1/f$, with most energy in large, smooth regions and comparatively little in fine texture. Layer a flat noise floor under a falling signal curve and they must cross, and the crossing is always on the fine-detail side.
+
+So the noise level is not really a measure of "how corrupted" the image is. It is a **cutoff frequency**. Sander Dieleman puts the mechanism well: large features cover many pixels, so many pixels vote for them and the noise averages out; a fine detail spans a handful of pixels and gets outvoted immediately. Turning $t$ up slides that cutoff toward coarser and coarser structure until even the silhouette is outvoted.
+
+Run the reverse of that and you get, for free, exactly the behavior the models exhibit: the earliest reverse steps operate where only the coarsest frequencies are above water, so they can only commit to layout and gross shape. Detail is not being withheld for dramatic effect. It is genuinely not decidable yet, and the model recovers it in the same order the forward process took it, last-destroyed-first-restored.
+
+## What This Sets Up
+
+We now have a path with two known ends: real images at $t=0$, pure Gaussian noise at $t=T$, and a closed form for every point between. Training data is free — pick an image, pick a $t$, jump.
+
+What we do not have is any way back. The forward step is a known Gaussian, but the reverse step $q(x_{t-1} \mid x_t)$ requires knowing $p(\text{image})$ — the very thing we could not write down when we started. The next two pages are about the two ideas that break that circle: [what the network should predict](../predict-the-noise/), and [why it must be asked in many small steps rather than one large one](../one-step-vs-many/).
+
+## References
+
+- Sohl-Dickstein et al., *Deep Unsupervised Learning using Nonequilibrium Thermodynamics.* ICML 2015. [arXiv:1503.03585](https://arxiv.org/abs/1503.03585) — the forward/reverse framing, taken directly from nonequilibrium thermodynamics.
+- Ho, Jain & Abbeel, *Denoising Diffusion Probabilistic Models.* NeurIPS 2020. [arXiv:2006.11239](https://arxiv.org/abs/2006.11239) — the closed-form jump and the $\bar\alpha$ notation used here.
+- Nichol & Dhariwal, *Improved Denoising Diffusion Probabilistic Models.* ICML 2021. [arXiv:2102.09672](https://arxiv.org/abs/2102.09672) — the cosine schedule the widget uses.
+- Dieleman, *Diffusion models are autoencoders* (2022). [sander.ai](https://sander.ai/2022/01/31/diffusion.html) — noise level as feature scale; the argument that larger features survive because more pixels vote for them.

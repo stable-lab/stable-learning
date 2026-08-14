@@ -28,6 +28,16 @@ From MDPs to modern policy optimization for LLM alignment.
 <LinkCard title="5. PPO" description="Clipped surrogate objectives and GAE — run the update loop live and toggle the clip off to watch training collapse." href="rl/05-ppo/" />
 <LinkCard title="6. GRPO" description="Group Relative Policy Optimization — watch groups of rollouts teach the policy, then stop teaching as prompts get solved." href="rl/06-grpo/" />
 
+## Image Generation & Diffusion
+
+How a model turns pure noise into an image it has never seen — what the generation task actually asks for, what GANs answered and why the field left them, and why destroying data and learning to undo it one small step at a time turned out to work.
+
+**Prerequisites**: basic probability (Gaussians, conditional expectation) and familiarity with neural networks. No prior generative-modeling background assumed.
+
+<LinkCard title="1. What Generation Asks For" description="Why almost no point in pixel space is an image, what GANs answered and why a live one gives different answers on identical settings, and the measured reason mode collapse is what the objective asks for." href="diffusion/01-the-problem/" />
+<LinkCard title="2. Destroy It, Then Undo It" description="Ink in water, the physics demo that seems to prove diffusion is reversible (it doesn't), and the three ideas that make the reverse process possible — with the forward process, noise prediction, and the one-step blur all running live." href="diffusion/02-diffusion/" />
+<LinkCard title="3. How Stable Diffusion Works" description="Latent diffusion and what the autoencoder is really for, how a prompt reaches every denoising step, and the guidance dial — including why its saturation artifacts are approximation error rather than law." href="diffusion/03-real-systems/" />
+
 ## Speculative Decoding
 
 How modern LLM serving generates 3–6× faster without changing a single output token — from the lossless acceptance rule to EAGLE, DFlash, and DSpark.

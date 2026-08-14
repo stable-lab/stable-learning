@@ -1,0 +1,71 @@
+---
+title: Destroy It, Then Learn to Undo
+description: Ink in water, the one physics demo that seems to prove diffusion is reversible, and what actually makes the reverse process possible
+sidebar:
+  order: 1
+---
+
+import MixingReversibility from '../../../../components/visualizations/MixingReversibility';
+
+Drop ink into a glass of water and you already know the whole story. A dark thread uncoils, softens, spreads, and after a minute the glass is a uniform pale blue. Everyone has watched this. Nobody has ever watched the reverse.
+
+That asymmetry is not a quirk of ink. It is the second law of thermodynamics doing its most familiar trick: a system with structure drifts toward one without, because there are overwhelmingly more ways to be spread out than to be a thread. Show someone a video of ink gathering itself back into a drop and they will identify it as reversed footage instantly and without effort, because the arrow of time is the most legible thing in the frame.
+
+So the founding move of this entire field looks, at first, like a joke. In 2015 Sohl-Dickstein and colleagues wrote down the ink-in-water process formally — a diffusion, in the literal physics sense, from their paper's title onward — and then proposed to **run it backwards on purpose**. Destroy an image gradually into structureless noise, learn the reverse of each small step, and then start from noise you generated yourself and walk back up the gradient of entropy into an image that never existed.
+
+The obvious objection is the one you should have. The forward direction is easy because it is what physics does anyway. Where does the reverse come from?
+
+## The Demo That Seems to Answer This, and Doesn't
+
+There is a famous physics demonstration that looks like it settles the question. Coloured dye is injected into corn syrup held between two concentric cylinders. Turn the crank and the dye smears into long spirals until the vessel looks uniformly, hopelessly mixed. Turn the crank back the same number of times and the dye **reassembles** into the original drops, sharp as they started.
+
+It is a genuinely startling thing to watch, and it is the single most misused analogy in explanations of diffusion models. Here is the same experiment, with the one knob that matters:
+
+<MixingReversibility client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Dye in an annular vessel under Taylor–Couette flow. Both media get exactly the same advection — the angular velocity profile $\omega(r) = \Omega \frac{r_{\text{in}}^2}{r_{\text{out}}^2 - r_{\text{in}}^2}\big(\frac{r_{\text{out}}^2}{r^2} - 1\big)$, a closed form, so cranking backwards undoes the shear exactly. The only difference between syrup and water is the molecular jitter added each tick, scaled as $\sqrt{\Delta t}$ the way real Brownian motion is. Run cranks four turns in and then four turns back out; displacement reports how far the dye sits from where it began.
+
+**Knobs.** One: molecular jitter. At 0 you have corn syrup — Reynolds number near zero, pure laminar flow, no diffusion at all. Turn it up and you have water.
+
+**Try this.** Leave jitter at 0 and press Run. Watch the blobs stretch into spirals that look completely mixed at four turns — then watch every strand walk backwards and reassemble into three clean drops, displacement returning to ≈ 0. Now set jitter to 0.5 and Run again. The forward half looks *identical*; the spirals form the same way. But on the way back the shear unwinds and the jitter does not, and the dye never comes home. That is the entire distinction the page is about, and it lives in one slider.
+</div>
+
+## What the Demo Actually Proves
+
+The syrup unmixes because **nothing was ever mixed.** At a Reynolds number near zero the flow is laminar and deterministic: every parcel of dye follows a smooth path, no two paths cross, and the state of the system at four turns contains every bit of information the state at zero turns did. It is scrambled, not destroyed. Reversing the crank applies the inverse map, and inverse maps are exact.
+
+Real diffusion is not that. Molecules take independent random walks, and a random walk has no inverse — running the clock backwards does not un-draw the dice. Information genuinely leaves the system, which is precisely why the ink never returns and why the second law is a law.
+
+So the honest reading of the demo is not "diffusion is reversible." It is the narrower and more useful claim: **"looks destroyed" and "is destroyed" are different claims, and your eye cannot tell them apart.** The four-turn syrup looks exactly as mixed as the four-turn water. One is recoverable and one is not, and no amount of staring at the vessel will tell you which.
+
+And our forward process is the *water*, not the syrup. Adding Gaussian noise really does destroy information; $x_T$ genuinely carries nothing about $x_0$. If reversibility were the requirement, the method would be dead on arrival.
+
+:::caution[Where this analogy is usually oversold]
+You will find the corn-syrup demo cited as though it explains why diffusion models work — as if the reverse process were an unmixing. It is not. Our noise is irreversible in exactly the way the demo's syrup is not. The demo is worth its place because it separates *looking* mixed from *being* mixed, and because it shows you cannot judge which by inspection. Anything more than that is borrowed credibility.
+:::
+
+## So Where Does the Reverse Actually Come From?
+
+Three ideas, none of which require undoing anything.
+
+**We do not have to invert a sample. We have to sample from a distribution.** This is the substitution that makes the whole field possible. Nobody is asking for *the* image that produced this particular noise — that question has no answer, and the second law says so. The task is to produce *some* image with the right statistics. Failure to recover the original is not an error; on almost every run it is the desired outcome.
+
+**The space of plausible answers is vanishingly small.** A 24×24 grayscale image has 576 free numbers, and almost every setting of them is static. Real images occupy a sliver of that space so thin as to be effectively invisible. So when noise destroys information, it destroys information *about which point on a very thin manifold you were on* — and the manifold itself is a colossal prior that was never in the noise to begin with. It is in the training data, and that is what the network is for.
+
+**Small steps make each reverse question answerable.** This is the technical core, and it gets [its own page](../one-step-vs-many/). For a diffusion with small enough steps, the reverse conditional has the same Gaussian form as the forward one — so the network never has to invert anything, only to predict a mean. Ask it to undo the whole process in one leap and it fails completely, and the way it fails is instructive enough to be worth watching.
+
+None of this is unmixing. It is closer to a different trick entirely: destroy the data along a path that ends somewhere you can start from, then learn the *statistics* of each small step of that path, and walk back up it generating a new sample rather than recovering an old one.
+
+## What's in This Chapter
+
+- **[The forward process](../forward-process/)** — why the destruction step is Gaussian, why that buys a closed-form jump to any noise level, and why fine detail always dies before coarse structure.
+- **[Why predict the noise](../predict-the-noise/)** — what the network is actually asked for, and why the seemingly perverse choice of predicting the noise instead of the image is the one that works.
+- **[Why one big step fails](../one-step-vs-many/)** — the mode-averaging collapse, watched live, and an honest reading of what the step count is really buying.
+
+## References
+
+- Sohl-Dickstein, Weiss, Maheswaranathan & Ganguli, *Deep Unsupervised Learning using Nonequilibrium Thermodynamics.* ICML 2015. [arXiv:1503.03585](https://arxiv.org/abs/1503.03585) — the paper that took the physics literally.
+- *Reversible Fluid Mixing*, Harvard Natural Sciences Lecture Demonstrations. [sciencedemonstrations.fas.harvard.edu](https://sciencedemonstrations.fas.harvard.edu/presentations/reversible-fluid-mixing) — the corn-syrup demonstration and the Stokes-flow explanation for it.
+- Taylor, G. I., *Stability of a Viscous Liquid Contained between Two Rotating Cylinders.* Phil. Trans. R. Soc. A, 1923 — the flow the widget integrates.
+- Smarter Every Day 217, *Laminar Flow / Unmixing Color Machine.* [youtube.com](https://www.youtube.com/watch?v=57IMufyoCnQ) — the demonstration performed with real syrup, if you want to see it done in a physical vessel.

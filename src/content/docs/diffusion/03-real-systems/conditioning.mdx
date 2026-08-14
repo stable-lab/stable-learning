@@ -1,0 +1,69 @@
+---
+title: Getting a Prompt Into the Loop
+description: How a sentence becomes a vector, how that vector reaches every denoising step, and why conditioning is a much smaller change than it looks
+sidebar:
+  order: 2
+---
+
+import GuidanceDial from '../../../../components/visualizations/GuidanceDial';
+
+Everything built so far samples from $p(\text{image})$ — it produces *an* image from the training distribution, and you get no say in which. What people actually want is $p(\text{image} \mid \text{"a fox reading a newspaper"})$.
+
+The surprise is how little has to change. Conditioning is not a new algorithm; it is one extra argument threaded through the one the model already had.
+
+## The Denoiser Gets One More Input
+
+The network was $\varepsilon_\theta(x_t, t)$: given a noisy image and its noise level, predict the noise. Conditioning makes it $\varepsilon_\theta(x_t, t, c)$, where $c$ encodes the prompt. The loss is the same regression it always was:
+
+$$
+L = \mathbb{E}_{t, x_0, \varepsilon, c}\big\lVert \varepsilon - \varepsilon_\theta(\sqrt{\bar\alpha_t}x_0 + \sqrt{1-\bar\alpha_t}\varepsilon,\ t,\ c) \big\rVert^2
+$$
+
+Train on (image, caption) pairs instead of images, hand the caption to the network alongside the noisy image, and the model learns to denoise *differently depending on what it was told*. There is no adversary to rebalance and no new objective — which is a direct dividend of [the loss being a plain regression](../../02-diffusion/predict-the-noise/). Conditioning a GAN was a research programme; conditioning a diffusion model is an extra function argument.
+
+## Turning a Sentence Into a Vector
+
+$c$ comes from a text encoder, and the reason a *contrastive* one is used is worth pinning down.
+
+CLIP is trained on hundreds of millions of image–caption pairs with one objective: put an image and its true caption close together in a shared space, and push mismatched pairs apart. It never generates anything. What it produces is a text embedding that already **lives in the same space as image content** — a geometry where "golden retriever" sits near pictures of golden retrievers.
+
+That is exactly the property the diffusion model needs, and the reason you cannot swap in any language model. A text encoder trained only on text has a geometry organised around *linguistic* similarity. CLIP's is organised around *visual* similarity, and the denoiser is a visual model.
+
+(The choice is not settled. Imagen found that a large frozen text-only encoder — T5-XXL — beat CLIP for prompt fidelity, on the argument that raw language understanding matters more than a shared embedding space once the model is big enough. Both approaches ship in production systems today.)
+
+## Cross-Attention: How It Reaches Every Step
+
+The prompt vector is injected into the denoiser through **cross-attention** layers spliced through the U-Net. At each layer, the image features form the queries; the prompt tokens form the keys and values. Every spatial position asks "which words are relevant to me?" and pulls in the answer.
+
+Two consequences worth holding on to:
+
+**Conditioning is spatial.** Different regions attend to different words. This is not decoration — it is why the model can put the fox on the left and the newspaper on the right, and it is the mechanism that attention-editing tools reach into when they let you change one object in a scene.
+
+**Conditioning applies at every step, not just the first.** The prompt is re-consulted at every one of the fifty reverse steps. That matters given [the coarse-to-fine ordering](../../02-diffusion/forward-process/): early steps have only coarse structure available, so the prompt influences layout; late steps have detail, so the same prompt influences texture. One vector, read differently at each noise level, because the thing reading it is at a different scale each time.
+
+Here is conditional sampling running — the same exact denoiser as before, with its posterior restricted to the requested class:
+
+<GuidanceDial client:only="react" />
+
+<div class="viz-caption">
+**What it models.** Conditional sampling on the sprite dataset, where the "prompt" is one of eight shapes. The conditional score is the exact posterior restricted to training images of that class; the unconditional score is the posterior over all of them. Both are computed in closed form. Set the guidance dial to 1.0 and this is ordinary conditional generation — the case this page is about; the [next page](../guidance/) is about what the dial does away from 1.
+
+**Knobs.** The prompt buttons choose the class. The guidance slider is the subject of the next page — leave it at 1.0 for now.
+
+**Try this.** With w = 1.0, pick a prompt and press Run. Every finished sample in the strip is that shape, and they differ in position, size and angle — the model is sampling *within* the condition rather than memorizing one answer to it. Now drag w to 0 and run again: the prompt is ignored entirely and you get whatever the unconditional model felt like. Measured over 24 runs, w = 0 lands on the requested class 25% of the time — barely above the 12.5% you would get by chance — and w ≥ 0.5 hits it 100% of the time.
+</div>
+
+## Why This Page Is Short
+
+Because conditioning genuinely is a small change, and it is worth noticing how much of that is inherited rather than invented.
+
+The forward process is untouched — noise does not care what the caption said. The parameterization is untouched. The sampler is untouched. The loss is the same squared error with one more variable in the expectation. All the machinery from chapter 2 keeps working, and the only new component is an encoder borrowed from a different field entirely.
+
+Compare that to the alternative history. Conditioning a GAN meant conditioning the *discriminator* too, and then keeping a two-player game balanced while both players juggled an extra input — a genuinely hard problem that produced a decade of papers. The asymmetry is not an accident. It is what you get when your objective is a fixed regression instead of a moving target.
+
+## References
+
+- Radford et al., *Learning Transferable Visual Models From Natural Language Supervision.* ICML 2021. [arXiv:2103.00020](https://arxiv.org/abs/2103.00020) — CLIP.
+- Rombach et al., *High-Resolution Image Synthesis with Latent Diffusion Models.* CVPR 2022. [arXiv:2112.10752](https://arxiv.org/abs/2112.10752) — §3.3 introduces the cross-attention conditioning mechanism used here.
+- Saharia et al., *Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding.* NeurIPS 2022. [arXiv:2205.11487](https://arxiv.org/abs/2205.11487) — Imagen; the finding that a large frozen text-only encoder outperforms CLIP for prompt fidelity.
+- Hertz et al., *Prompt-to-Prompt Image Editing with Cross-Attention Control.* ICLR 2023. [arXiv:2208.01626](https://arxiv.org/abs/2208.01626) — evidence that cross-attention maps really do carry the spatial word-to-region correspondence.

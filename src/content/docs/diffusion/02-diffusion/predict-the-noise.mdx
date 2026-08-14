@@ -1,0 +1,75 @@
+---
+title: Why Predict the Noise
+description: The model could predict the image, the noise, or the score — they are the same object. Why the perverse-looking choice is the one that works.
+sidebar:
+  order: 3
+---
+
+import ThreeTargets from '../../../../components/visualizations/ThreeTargets';
+
+We want images. The network is handed a noisy image and asked for a number, and the sane request would seem to be *give me the clean image*. Instead, every diffusion model you have used asks for something that sounds like the opposite: **predict the noise that was added.** Then it subtracts that prediction and keeps what is left.
+
+This looks like a detour, and readers reasonably suspect it is a mathematical convenience with no real content. It is not. But the first thing to establish is that the choice cannot possibly be about information.
+
+## They Are the Same Object
+
+Given the noisy image $x_t$ and the noise level, any one of these three quantities determines the other two exactly:
+
+$$
+\hat{x}_0 = \frac{x_t - \sqrt{1-\bar\alpha_t}\,\hat\varepsilon}{\sqrt{\bar\alpha_t}},
+\qquad
+\hat\varepsilon = \frac{x_t - \sqrt{\bar\alpha_t}\,\hat{x}_0}{\sqrt{1-\bar\alpha_t}},
+\qquad
+\hat{s} = -\frac{\hat\varepsilon}{\sqrt{1-\bar\alpha_t}}
+$$
+
+Predicting the clean image, predicting the noise, and predicting the score $\nabla_{x_t}\log q(x_t)$ are one prediction in three costumes. A network that is perfect at any one of them is perfect at all three. Whatever the choice is buying, it is not information.
+
+What it changes is **conditioning**: how big the target is, whether its size depends on $t$, and — the part that actually decides the matter — how an error of a given size propagates into the thing we care about.
+
+<ThreeTargets client:only="react" />
+
+<div class="viz-caption">
+**What it models.** One image at one noise level, showing all three candidate targets side by side, plus the quantity that separates them. The chart is the error amplification: if the network's prediction is off by one unit, how far off is the reconstructed clean image? For $x_0$-prediction that factor is 1 by definition. For $\varepsilon$-prediction it is $\sqrt{1-\bar\alpha}/\sqrt{\bar\alpha}$. For score-prediction it is $(1-\bar\alpha)/\sqrt{\bar\alpha}$. The dashed vertical line marks where the $t$ slider is.
+
+**Knobs.** The $t$ slider sweeps the noise level; the thumbnails change the image.
+
+**Try this.** Park $t$ in the middle, around 600, and note the three chips sit within about 1.5× of each other — through the mid-range no parameterization has a real advantage. Now drag $t$ down toward 0 and watch the green $\varepsilon$ curve dive while the amber $x_0$ line stays pinned at 1×: by $t = 100$ a unit error in the predicted noise costs **0.17** of that in the image, and by $t = 20$ only **0.042**. Then drag the other way, past 900, and watch the same green curve shoot *above* the amber one — ×6.4 at $t = 900$ and ×316 at $t = 999$. $\varepsilon$-prediction is not uniformly better; it is dramatically better exactly where it matters and worse where it does not. Also watch the RMS-score readout as you approach $t = 0$: it passes 150, which is why the purple curve wins on paper and loses in practice.
+</div>
+
+## The Three Reasons, In Order of Weight
+
+**1. The target has the same distribution at every noise level.** $\varepsilon \sim \mathcal{N}(0,\mathbf{I})$ — zero mean, unit variance, always. Not approximately, and not on average over the dataset: exactly, at every $t$, by construction. A single network with one set of weights has to cover the entire range from nearly-clean to pure static, and asking it for a target whose scale and shape never move is the difference between one regression problem and a thousand differently-scaled ones. This is the sense in which *the thing being predicted is normal, so it is easier to predict* — the network never has to learn what scale its own output should be, because the answer is always the same.
+
+Compare the alternatives. $x_0$ is bounded and fine, but its *relationship* to the input changes drastically with $t$. The score is worst: $\hat{s} = -\hat\varepsilon/\sqrt{1-\bar\alpha}$, so as $t \to 0$ the target diverges. Watch the RMS-score readout climb past 150 near $t = 1$. Regressing onto an unbounded target is a bad idea for reasons that have nothing to do with diffusion.
+
+**2. Predicting the noise is a free skip connection.** This is what the chart shows, and it is the most practical of the three.
+
+Near $t = 0$ the input is *almost* the answer. The correct behavior is to change almost nothing. Under $\varepsilon$-prediction, "change nothing" is spelled `output ≈ 0` — the easiest thing a neural network can say, and the thing an untrained one says by default. Under $x_0$-prediction, "change nothing" requires the network to re-emit all 576 pixels of the input faithfully through every layer, and any sloppiness shows up directly as a corrupted image.
+
+The chart makes the consequence exact. At $t = 100$ the amplification factor for $\varepsilon$-prediction has fallen to 0.17, at $t = 20$ to 0.042, and at $t = 1$ to 0.006: mistakes made in the low-noise regime are multiplied by nearly zero before they reach the image. And the low-noise regime is where the final quality of a sample is decided — it is the last thing that happens before you look at the output. $\varepsilon$-prediction puts the network's least reliable behavior exactly where it costs the least.
+
+**3. The geometry is asymmetric.** $\varepsilon$ is isotropic: it fills all 576 dimensions equally, with no structure to learn and no manifold to fall off. Images do the opposite — they sit on a thin, curved, complicated sliver of that space. Asking the network to *emit* a point on that manifold is a harder demand than asking it to identify a direction in the ambient space, and the second request has a well-conditioned answer everywhere.
+
+:::note[This is a choice, not a law]
+$\varepsilon$-prediction wins overwhelmingly at low noise and actively *loses* at high noise — the green curve crosses above the amber one around $t \approx 750$ and reaches ×316 by $t = 999$. That crossing is why the picture kept evolving. **v-prediction** interpolates between $\varepsilon$ and $x_0$ so that neither end degenerates, and it is what most modern high-resolution and distilled models train on. The chart above is the argument for it in one picture: a target that is well-conditioned across the *whole* range beats one that is superb on half of it and unusable on the other.
+:::
+
+## What Falls Out for Free
+
+Because $\hat\varepsilon$ and the score differ only by a constant factor at each noise level, a network trained with the plain noise-prediction loss
+
+$$
+L_\text{simple} = \mathbb{E}_{t,x_0,\varepsilon}\big\lVert \varepsilon - \varepsilon_\theta(\sqrt{\bar\alpha_t}x_0 + \sqrt{1-\bar\alpha_t}\varepsilon,\ t) \big\rVert^2
+$$
+
+is, without anyone intending it, a **score estimator** — it has learned $\nabla_x \log q(x_t)$ up to scaling, at every noise level at once. That is what connects this construction to the separate line of work on score matching and Langevin dynamics, and it is why the two literatures turned out to be describing the same algorithm from opposite directions.
+
+It is also why the loss is so plain. No adversary, no discriminator, no equilibrium to balance — just a regression onto a target you generated yourself and therefore know exactly. That property is the one the next chapter will contrast against GANs, where the target is a moving object produced by a second network actively trying to defeat the first.
+
+## References
+
+- Ho, Jain & Abbeel, *Denoising Diffusion Probabilistic Models.* NeurIPS 2020. [arXiv:2006.11239](https://arxiv.org/abs/2006.11239) — the $\varepsilon$-parameterization and $L_\text{simple}$; reports noise prediction outperforming direct image prediction.
+- Song & Ermon, *Generative Modeling by Estimating Gradients of the Data Distribution.* NeurIPS 2019. [arXiv:1907.05600](https://arxiv.org/abs/1907.05600) — the score-matching route to the same algorithm, and why a single noise scale fails.
+- Salimans & Ho, *Progressive Distillation for Fast Sampling of Diffusion Models.* ICLR 2022. [arXiv:2202.00512](https://arxiv.org/abs/2202.00512) — introduces v-prediction and the conditioning argument for it.
+- Dieleman, *Perspectives on diffusion* (2023). [sander.ai](https://sander.ai/2023/07/20/perspectives.html) — the equivalence of the parameterizations, and why an MSE-trained network necessarily outputs a conditional expectation.
